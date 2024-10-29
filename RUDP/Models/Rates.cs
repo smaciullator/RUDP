@@ -1,6 +1,4 @@
-﻿using System.Net;
-
-namespace RUDP.Models
+﻿namespace RUDP.Models
 {
     public class Rates
     {
