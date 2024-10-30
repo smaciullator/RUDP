@@ -187,7 +187,7 @@ namespace RUDP
                 }
             }, TaskCreationOptions.LongRunning);
         }
-        public void TryConnectLocallyWith(EndPoint ep, byte relativeIndex = 0)
+        public void TryConnectLocallyWith(EndPoint ep)
         {
             Task.Factory.StartNew(() =>
             {
@@ -203,7 +203,6 @@ namespace RUDP
 
                 if (!_epsInfo.ContainsKey(ep))
                     OnConnectionFailed?.Invoke(ep);
-
             }, TaskCreationOptions.LongRunning);
         }
         /// <summary>
