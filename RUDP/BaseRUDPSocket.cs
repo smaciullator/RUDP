@@ -117,8 +117,13 @@ namespace RUDP
         {
             try
             {
-                NSec nsec = NSec.FromBech32(bech32NSec);
-                Identity = string.IsNullOrEmpty(nsec.Bech32) ? KeyPair.GenerateNew() : KeyPair.From(nsec);
+                if (string.IsNullOrEmpty(bech32NSec))
+                    Identity = KeyPair.GenerateNew();
+                else
+                {
+                    NSec nsec = NSec.FromBech32(bech32NSec);
+                    Identity = string.IsNullOrEmpty(nsec.Bech32) ? KeyPair.GenerateNew() : KeyPair.From(nsec);
+                }
                 return true;
             }
             catch
@@ -1001,6 +1006,8 @@ namespace RUDP
                         NPub? npub = _epsInfo[receivedFrom].NPub;
                         if (npub is not null)
                         {
+                            if (_epsInfo[receivedFrom].RelativeIndex == 0)
+                                _epsInfo[receivedFrom].SetRelativeIndex(1);
                             OnConnectionConfirmed?.Invoke(receivedFrom, npub.Bech32, isSigServer.Value, _epsInfo[receivedFrom].RelativeIndex);
                             //// A client immediately disconnect from a Signaling Server after the first notification
                             //if (!SigServer && isSigServer.Value)

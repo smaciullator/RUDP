@@ -383,7 +383,6 @@ namespace RUDP
                             _epsRates[receivedFrom].ReceivedBytesPerSecond += receivedBytes;
                             _epsRates[receivedFrom].ReceivedPacketsPerSecond += 1;
 
-                            Console.WriteLine($"Received {receivedBytes} bytes from {receivedFrom.ToIPV4String()}");
                             if (_heapBuffer is not null)
                                 _receivedData.Enqueue(new(receivedFrom, _heapBuffer.AsSpan().Slice(0, receivedBytes).ToArray()));
                         }
