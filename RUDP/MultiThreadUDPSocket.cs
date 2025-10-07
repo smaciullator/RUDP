@@ -77,7 +77,15 @@ namespace RUDP
                 udp.Blocking = true; // Quando il SendBuffer è pieno, il thread che invia viene bloccato fino a che non si libera spazio
 
                 // Eseguo manualmente un binding su una porta solo se è specificata, altrimenti lascio decidere al sistema
-                IPAddress localIPAddress = NetworkUtilities.GetLocalIPAddress();
+                IPAddress localIPAddress = IPAddress.Any;
+                try
+                {
+                    localIPAddress = NetworkUtilities.GetLocalIPAddress();
+                }
+                catch (Exception)
+                {
+                    localIPAddress = IPAddress.Any;
+                }
                 if (_customPort > 0)
                 {
                     LocalEP = new IPEndPoint(localIPAddress, _customPort);
