@@ -34,14 +34,6 @@ namespace RUDP.Models
         /// Define the current unique numeration used for all packets (excepts STR)
         /// </summary>
         internal uint SendNumeration { get; private set; } = 0;
-        /// <summary>
-        /// Represent the cryptographycally secure random Int32 sent by me to this ep
-        /// </summary>
-        internal int? SentSecret { get; private set; } = null;
-        /// <summary>
-        /// Represent the cryptographycally secure random Int32 i received from this ep
-        /// </summary>
-        internal int? ReceivedSecret { get; private set; } = null;
 
 
         /// <summary>
@@ -289,30 +281,6 @@ namespace RUDP.Models
 
 
         /// <summary>
-        /// Set the current secret randomly generated and sent by me to this endpoint
-        /// </summary>
-        /// <returns></returns>
-        internal EPInfo SetSentSecret()
-        {
-            int secret = RandomNumberGenerator.GetInt32(int.MaxValue);
-            while (secret == 0)
-                secret = RandomNumberGenerator.GetInt32(int.MaxValue);
-            SentSecret = secret;
-            return this;
-        }
-        /// <summary>
-        /// Set the current secret randomly generated and sent by this endpoint to me
-        /// </summary>
-        /// <param name="secret"></param>
-        /// <returns></returns>
-        internal EPInfo SetReceivedSecret(int secret)
-        {
-            ReceivedSecret = secret;
-            return this;
-        }
-
-
-        /// <summary>
         /// Sets the NPub identity
         /// </summary>
         /// <param name="npub"></param>
@@ -348,8 +316,6 @@ namespace RUDP.Models
                 chunk.Value.Clear();
             }
             _chunks.Clear();
-            ReceivedSecret = null;
-            SentSecret = null;
         }
     }
 }

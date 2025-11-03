@@ -25,13 +25,13 @@ namespace RUDP.Keys
         /// <param name="signatureHex"></param>
         /// <param name="hex"></param>
         /// <returns></returns>
-        internal bool IsHexSignatureValid(string? signatureHex, string? hex)
+        internal bool IsHexSignatureValid(string signatureHex, byte[] hex)
         {
             if (string.IsNullOrEmpty(signatureHex))
                 return false;
             if (!SecpSchnorrSignature.TryCreate(signatureHex.HexToByteArray(), out SecpSchnorrSignature? schnorr) || schnorr is null)
                 return false;
-            return Ec.SigVerifyBIP340(schnorr, (hex ?? "").HexToByteArray());
+            return Ec.SigVerifyBIP340(schnorr, hex);
         }
 
 

@@ -3,10 +3,12 @@ using RUDP.Extensions;
 using RUDP.Keys;
 using RUDP.Models;
 using RUDP.Utilities;
+using System;
 using System.Collections.Concurrent;
 using System.Data;
 using System.Diagnostics;
 using System.Net;
+using System.Reflection.PortableExecutable;
 using System.Text;
 
 namespace RUDP
@@ -132,7 +134,7 @@ namespace RUDP
             }
         }
         /// <summary>
-        /// Set the global upload speed limit for this socket instance, calculated with the sum of all bytes sent per second to
+        /// Set the global upload speed limit for this socket instance, calculated with the sum of all bytes sent per second to any endpoint
         /// Expressed in bytes
         /// </summary>
         /// <param name="maxUploadSpeed">Expressed in bytes</param>
@@ -414,7 +416,7 @@ namespace RUDP
         {
             if (!_epsInfo.ContainsKey(sendTo))
                 return false;
-            return Send(sendTo, Header.MTU_DISCOVERY(), Body.MTU_DISCOVERY(dataSize, Identity.NPub, relativeIndex), true);
+            return Send(sendTo, PacketUtilities.MTU_DISCOVERY(Identity.NPub.Hex, dataSize, relativeIndex), true);
         }
         /// <summary>
         /// Send an MTUF (MTU Found) packet after an MTUD is received, to end the channel size discovery and set the size on both peers.
@@ -425,7 +427,7 @@ namespace RUDP
         {
             if (!_epsInfo.ContainsKey(sendTo))
                 return false;
-            return Send(sendTo, Header.MTU_FOUND(_epsInfo[sendTo].GetNextSendNumeration()), Body.MTU_FOUND(dataLenght, Identity.NPub), true);
+            return Send(sendTo, PacketUtilities.MTU_FOUND(Identity.NPub, _epsInfo[sendTo].GetNextSendNumeration(), dataLenght), true);
         }
         /// <summary>
         /// Try to send an HNDS (Handshake) packet with the current secret set for this endpoint.
@@ -433,14 +435,11 @@ namespace RUDP
         /// </summary>
         /// <param name="sendTo"></param>
         /// <returns></returns>
-        private bool SendHandShake(EndPoint sendTo, int? sentSecret, int? receivedSecret)
+        private bool SendHandShake(EndPoint sendTo)
         {
             if (!_epsInfo.ContainsKey(sendTo))
                 return false;
-            byte[]? data = Body.TryEncryptData(Identity, GetEPNPub(sendTo), Body.HANDSHAKE(sentSecret, receivedSecret), out byte[] ivBytes);
-            if (data is null)
-                return false;
-            return Send(sendTo, Header.HANDSHAKE(_epsInfo[sendTo].GetNextSendNumeration(), ivBytes), data, true);
+            return Send(sendTo, PacketUtilities.HANDSHAKE(Identity, _epsInfo[sendTo].GetNextSendNumeration()), true);
         }
         /// <summary>
         /// Send a CNCF (Connection Confirm) packet to end the MTU Size Negotiation + Identity Check Phase
@@ -451,10 +450,7 @@ namespace RUDP
         {
             if (!_epsInfo.ContainsKey(sendTo))
                 return false;
-            byte[]? data = Body.TryEncryptData(Identity, GetEPNPub(sendTo), Body.CONNECTION_CONFIRM(SigServer), out byte[] ivBytes);
-            if (data is null)
-                return false;
-            return Send(sendTo, Header.CONNECTION_CONFIRM(_epsInfo[sendTo].GetNextSendNumeration(), ivBytes), data, true);
+            return Send(sendTo, PacketUtilities.CONNECTION_CONFIRM(Identity, _epsInfo[sendTo].GetNextSendNumeration(), SigServer), true);
         }
         /// <summary>
         /// Try to send a DISCONNECTION packet to do a collaborative disconnection with the other peer
@@ -661,12 +657,12 @@ namespace RUDP
         #endregion
 
 
-        private bool Send(EndPoint sendTo, Header header, byte[]? data = null, bool requireAck = false)
+        private bool Send(EndPoint sendTo, (Header header, byte[]? data) pkt, bool requireAck = false)
         {
             if (socket is null || _recentlyDisconnectedEndpoints.ContainsKey(sendTo))
                 return false;
 
-            List<byte[]>? chunks = GetChunks(sendTo, header, data);
+            List<byte[]>? chunks = GetChunks(sendTo, pkt.header, pkt.data);
             if (chunks is null)
                 return false;
             foreach (byte[] chunk in chunks)
@@ -682,7 +678,7 @@ namespace RUDP
         {
             // If the current MTU Size is too small we can't procede
             int maxPktSize = GetEPMTUSize(sendTo);
-            if (maxPktSize < 65)
+            if (maxPktSize < Header._minSize)
                 return null;
 
             List<byte[]> chunks = new();
@@ -694,7 +690,7 @@ namespace RUDP
             // If the packet have to be divided in chunks
             else
             {
-                // If the MTU Size is smaller than 65 bytes the protocol doesn't work
+                // If the MTU Size is smaller than {Header._minSize} bytes the protocol doesn't work
                 if (data is null)
                     return null;
                 // Only DATA and STR packets can be chunked
@@ -716,7 +712,7 @@ namespace RUDP
                 {
                     header.ChunkNumber = 1; // The packet sharing the Aes IV always need ChunkNumber = 1 (0 is reserved for non-chunked packets)
                     chunks.Add(PacketUtilities.CreatePacket(header, BitConverter.GetBytes(chunksNumber))); // We also send the total chunks expected
-                    header.IV = null; // Now we can safely remove IV to prevent it from appearing on the next chunks
+                    //header.IV = null; // Now we can safely remove IV to prevent it from appearing on the next chunks
                 }
 
 
@@ -769,9 +765,12 @@ namespace RUDP
                 return;
 
             Header header = Header.Deserialize(packet);
+            Span<byte> rawBody = new Span<byte>(packet).Slice(header.Length);
             string bech32 = "";
             if (_epsInfo.ContainsKey(receivedFrom))
                 bech32 = _epsInfo[receivedFrom].NPubBech32 ?? "";
+            NPub? senderNPub = GetEPNPub(receivedFrom);
+
             switch (header.Type)
             {
                 case PacketType.DATA:
@@ -925,7 +924,7 @@ namespace RUDP
                 case PacketType.MTU_DISCOVERY:
                     SendAcknowledge(receivedFrom, packet);
                     // MTU Size is not big enough
-                    if (packet.Length < 65)
+                    if (packet.Length < Header._minSize)
                         break;
                     if (!Body.MTU_DISCOVERY(packet, out NPub? npubMTUD, out byte relativeIndex) || npubMTUD is null)
                         break;
@@ -949,70 +948,55 @@ namespace RUDP
                     SetEPMTUSize(receivedFrom, dataLength.Value);
                     // TODO: se esiste già una NPub (es. connessione con un peer tramite sig-server) allora le due NPub devono coincidere
                     _epsInfo[receivedFrom].SetNPub(npubMTUF);
-                    _epsInfo[receivedFrom].SetSentSecret();
-                    SendHandShake(receivedFrom, _epsInfo[receivedFrom].SentSecret, null);
+                    SendHandShake(receivedFrom);
                     break;
                 case PacketType.HANDSHAKE:
                     SendAcknowledge(receivedFrom, packet);
 
-                    // Decrypt and excract body content
-                    if (!Body.HANDSHAKE(packet, Identity.NSec, GetEPNPub(receivedFrom), out int? sentSecret, out int? receivedSecret))
+                    if (packet.Length < Header._minSignedSize)
                         break;
 
-                    // 1st HND (Handshake) step: sender secret reception
-                    if (sentSecret.HasValue && !receivedSecret.HasValue)
+                    if (senderNPub is null || !PacketUtilities.IsSignatureValid(senderNPub, header, null))
                     {
-                        _epsInfo[receivedFrom].SetReceivedSecret(sentSecret.Value);
-                        _epsInfo[receivedFrom].SetSentSecret();
-                        SendHandShake(receivedFrom, _epsInfo[receivedFrom].SentSecret, _epsInfo[receivedFrom].ReceivedSecret);
+                        _epsInfo[receivedFrom].SetTrusted(false);
+                        break;
                     }
-                    // 2nd HND (Handshake) step: sender solution check and receiver secret reception
-                    else if (sentSecret.HasValue && receivedSecret.HasValue)
+
+                    if (!_epsInfo[receivedFrom].IsTrusted)
                     {
-                        if (_epsInfo[receivedFrom].SentSecret != receivedSecret)
-                        {
-                            _epsInfo[receivedFrom].SetTrusted(false);
-                            break;
-                        }
-                        _epsInfo[receivedFrom].SetReceivedSecret(sentSecret.Value);
-                        SendHandShake(receivedFrom, null, _epsInfo[receivedFrom].ReceivedSecret);
                         _epsInfo[receivedFrom].SetTrusted(true);
-                    }
-                    // 3nd HND (Handshake) step: receiver solution check
-                    else if (!sentSecret.HasValue && receivedSecret.HasValue)
-                    {
-                        if (_epsInfo[receivedFrom].SentSecret != receivedSecret)
-                        {
-                            _epsInfo[receivedFrom].SetTrusted(false);
-                            break;
-                        }
-                        SendConnectionConfirm(receivedFrom);
-                        _epsInfo[receivedFrom].SetTrusted(true);
+
+                        if (_epsInfo[receivedFrom].AmIConnecting.HasValue && _epsInfo[receivedFrom].AmIConnecting.Value)
+                            SendConnectionConfirm(receivedFrom);
+                        else
+                            SendHandShake(receivedFrom);
                     }
                     break;
                 case PacketType.CONNECTION_CONFIRM:
                     SendAcknowledge(receivedFrom, packet);
 
-                    // Decrypt and excract body content
-                    if (!Body.CONNECTION_CONFIRM(packet, Identity.NSec, GetEPNPub(receivedFrom), out bool? isSigServer) || !isSigServer.HasValue)
+                    if (packet.Length < Header._minSignedSize || rawBody.Length != 1)
                         break;
+
+                    if (senderNPub is null || !PacketUtilities.IsSignatureValid(senderNPub, header, null))
+                    {
+                        _epsInfo[receivedFrom].SetTrusted(false);
+                        break;
+                    }
 
                     if (IsEPTrusted(receivedFrom) && !_epsInfo[receivedFrom].IsConnected)
                     {
+                        bool isSigServer = BitConverter.ToBoolean(rawBody);
+
                         _epsInfo[receivedFrom].SetConnected(true);
                         _epsInfo[receivedFrom].SetAmIConnecting(null);
-                        _epsInfo[receivedFrom].SetIsSigServer(isSigServer.Value);
+                        _epsInfo[receivedFrom].SetIsSigServer(isSigServer);
+
                         SendConnectionConfirm(receivedFrom);
-                        NPub? npub = _epsInfo[receivedFrom].NPub;
-                        if (npub is not null)
-                        {
-                            if (_epsInfo[receivedFrom].RelativeIndex == 0)
-                                _epsInfo[receivedFrom].SetRelativeIndex(1);
-                            OnConnectionConfirmed?.Invoke(receivedFrom, npub.Bech32, isSigServer.Value, _epsInfo[receivedFrom].RelativeIndex);
-                            //// A client immediately disconnect from a Signaling Server after the first notification
-                            //if (!SigServer && isSigServer.Value)
-                            //    DisconnectFrom(receivedFrom);
-                        }
+
+                        if (_epsInfo[receivedFrom].RelativeIndex == 0)
+                            _epsInfo[receivedFrom].SetRelativeIndex(1);
+                        OnConnectionConfirmed?.Invoke(receivedFrom, senderNPub.Bech32, isSigServer, _epsInfo[receivedFrom].RelativeIndex);
                     }
                     break;
                 case PacketType.DISCONNECTION:
@@ -1170,8 +1154,8 @@ namespace RUDP
                 addValue: new(ep),
                 updateValueFactory: (endpoint, value) => value.ReduceMTUSize(dataSize)
             );
-            if (dataSize < 65)
-                return;
+            if (dataSize < Header._minSize)
+                throw new ApplicationException("MTU size is not large enough to contain minimum packet size");
             SendMTUDiscovery(ep, Convert.ToInt32(_epsInfo[ep].MTUSize));
         }
         private void Socket_OnRemoteConnectionReset(EndPoint ep)

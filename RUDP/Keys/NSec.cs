@@ -67,15 +67,15 @@ namespace RUDP.Keys
 
 
         /// <summary>
-        /// Accept aa byte array and sign it using this NSec instance
+        /// Accept a byte array and sign it using this NSec instance
         /// </summary>
         /// <param name="data"></param>
         /// <returns>Return a valid signature if success, or null in case of error</returns>
-        internal byte[]? SignHex(byte[] data)
+        internal string? SignHex(byte[] data)
         {
             if (data is null || data.Length == 0)
                 return null;
-            return !Ec.TrySignBIP340(data, null, out SecpSchnorrSignature? signature) || signature is null ? null : signature.ToBytes();
+            return !Ec.TrySignBIP340(data, null, out SecpSchnorrSignature? signature) || signature is null ? null : signature.ToBytes().ToHexString();
         }
 
 

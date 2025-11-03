@@ -2,18 +2,16 @@
 using RUDP.Extensions;
 using RUDP.Keys;
 using System.Net;
+using System.Text;
 
 namespace RUDP.Utilities
 {
     internal class Body
     {
-        internal static byte[] MTU_DISCOVERY(int dataSize, NPub npub, byte relativeIndex = 0)
+        internal static byte[] MTU_DISCOVERY(int dataSize, byte relativeIndex = 0)
         {
-            byte[] pubKey = npub.Bech32.UTF8AsByteArray();
-            byte[] body = new byte[dataSize - (pubKey.Length + 1)];
-            Array.Copy(pubKey, 0, body, 0, pubKey.Length);
-            body[pubKey.Length] = relativeIndex;
-            pubKey = new byte[0];
+            byte[] body = new byte[dataSize];
+            body[0] = relativeIndex;
             return body;
         }
         internal static bool MTU_DISCOVERY(byte[] packet, out NPub? npub, out byte relativeIndex)
@@ -71,6 +69,11 @@ namespace RUDP.Utilities
         }
 
 
+        internal static byte[] HANDSHAKE(string sharedHex)
+        {
+            byte[] body = Encoding.UTF8.GetBytes(sharedHex);
+            return body;
+        }
         internal static byte[] HANDSHAKE(int? sentSecret = null, int? receivedSecret = null)
         {
             sentSecret = !sentSecret.HasValue ? 0 : sentSecret.Value;

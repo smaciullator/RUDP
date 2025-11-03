@@ -27,13 +27,17 @@ namespace RUDP
 
 
         public Socket? udp { get; private set; } = null;
-        public EndPoint LocalEP { get; private set; }
+        public EndPoint? LocalEP => udp is null || udp.LocalEndPoint is null ? null : new IPEndPoint(IPAddress.Any, ((IPEndPoint)udp.LocalEndPoint).Port);
         public SocketStatus Status { get; set; } = SocketStatus.NotInitialized;
+
+
+        private CancellationTokenSource _token { get; set; }
 
 
         private byte[]? _heapBuffer { get; set; } = null;
         private int _customPort { get; set; } = 0;
         private int _sendBufferFillStatus { get; set; } = 0;
+        private int _maxConcurrentEndpoints { get; set; } = ushort.MaxValue;
         private bool _sendRunning { get; set; } = false;
         private bool _receiveRunning { get; set; } = false;
         private bool _emitRunning { get; set; } = false;
@@ -57,7 +61,7 @@ namespace RUDP
         /// <param name="customPort">Optionally set the port to be used</param>
         public MultiThreadUDPSocket(int customPort = 0)
         {
-            _customPort = customPort;
+            _customPort = Math.Max(1, Math.Min(ushort.MaxValue, customPort));
             Init();
         }
         private void Init()
@@ -77,26 +81,8 @@ namespace RUDP
                 udp.Blocking = true; // Quando il SendBuffer è pieno, il thread che invia viene bloccato fino a che non si libera spazio
 
                 // Eseguo manualmente un binding su una porta solo se è specificata, altrimenti lascio decidere al sistema
-                IPAddress localIPAddress = IPAddress.Any;
-                try
-                {
-                    localIPAddress = NetworkUtilities.GetLocalIPAddress();
-                }
-                catch (Exception)
-                {
-                    localIPAddress = IPAddress.Any;
-                }
                 if (_customPort > 0)
-                {
-                    LocalEP = new IPEndPoint(localIPAddress, _customPort);
-                    udp.Bind(LocalEP);
-                }
-                else
-                {
-                    // Invio un pacchetto a caso per bindare il socket in automatico
-                    udp.SendTo(new byte[1], "192.168.1.1:80".ToEndPoint());
-                    LocalEP = new IPEndPoint(localIPAddress, ((IPEndPoint)udp.LocalEndPoint).Port);
-                }
+                    udp.Bind(new IPEndPoint(IPAddress.Any, _customPort));
 
                 Status = SocketStatus.Stopped;
             }
@@ -118,6 +104,7 @@ namespace RUDP
             Status = SocketStatus.Starting;
             try
             {
+                _token = new CancellationTokenSource();
                 StartBackgroundTasks();
                 StartSend();
                 StartReceive();
@@ -164,6 +151,7 @@ namespace RUDP
             Status = SocketStatus.Stopping;
             try
             {
+                _token.Cancel();
                 if (udp is not null)
                     udp.Shutdown(SocketShutdown.Both);
             }
@@ -206,9 +194,9 @@ namespace RUDP
 
             int sendBufferFillPercentage = Convert.ToInt32(Math.Round((double)_sendBufferFillStatus * 100 / (double)udp.SendBufferSize, MidpointRounding.AwayFromZero));
             if (sendBufferFillPercentage >= 99)
-                ThreadUtilities.PauseThread(2000);
+                return false;
 
-            _sendBufferFillStatus += data.Length;
+            _sendBufferFillStatus = Math.Min(int.MaxValue, _sendBufferFillStatus + data.Length);
             _sendQueue.Enqueue(new(sendTo, data));
             return true;
         }
@@ -271,7 +259,7 @@ namespace RUDP
             {
                 _backgroundTaskRunning = true;
                 Stopwatch _backgroundTaskTimer = Stopwatch.StartNew();
-                while (udp is not null)
+                while (!_token.IsCancellationRequested)
                     try
                     {
                         Rates totalRates = new();
@@ -311,9 +299,12 @@ namespace RUDP
                     _sendRunning = true;
                     int bytesSent = 0;
                     RawData pkt = new();
-                    while (udp is not null)
+                    while (!_token.IsCancellationRequested)
                         try
                         {
+                            if (udp is null)
+                                break;
+
                             if (!_sendQueue.TryDequeue(out pkt))
                             {
                                 ThreadUtilities.PauseThread(100);
@@ -322,9 +313,9 @@ namespace RUDP
 
                             if (
                                 // If this endpoint has a congestion window setted and has reached or surpassed the amount of sendable data
-                                (_epsMaxCongestionWindow.ContainsKey(pkt.EP) && _epsMaxCongestionWindow[pkt.EP] > 0 && _epsRates[pkt.EP].SentBytesPerSecond + pkt.Data.Length >= _epsMaxCongestionWindow[pkt.EP])
+                                (_epsMaxCongestionWindow.TryGetValue(pkt.EP, out double cw) && cw > 0 && _epsRates[pkt.EP].SentBytesPerSecond + pkt.Data.Length >= cw)
                                 // Or if the max upload speed for this endpoint has been reached
-                                || (_epsMaxUploadSpeed.ContainsKey(pkt.EP) && _epsMaxUploadSpeed[pkt.EP] > 0 && _epsRates[pkt.EP].SentBytesPerSecond + pkt.Data.Length >= _epsMaxUploadSpeed[pkt.EP])
+                                || (_epsMaxUploadSpeed.TryGetValue(pkt.EP, out double mus) && mus > 0 && _epsRates[pkt.EP].SentBytesPerSecond + pkt.Data.Length >= mus)
                             )
                             {
                                 // The packet simply gets rescheduled
@@ -373,23 +364,30 @@ namespace RUDP
                     EndPoint? receivedFrom = new IPEndPoint(IPAddress.Any, 0);
                     int receivedBytes = 0;
                     _heapBuffer = GC.AllocateArray<byte>(length: 1500, pinned: true);
-                    while (udp is not null)
+                    while (!_token.IsCancellationRequested)
                         try
                         {
+                            if (udp is null)
+                                break;
+
                             receivedFrom = new IPEndPoint(IPAddress.Any, 0);
                             receivedBytes = 0;
-                            if (_heapBuffer is not null && udp is not null)
+                            if (_heapBuffer is not null)
                                 receivedBytes = udp.ReceiveFrom(_heapBuffer, SocketFlags.None, ref receivedFrom);
-                            if (_heapBuffer is null || udp is null || receivedBytes == 0 || receivedFrom.EqualTo(udp.LocalEndPoint))
+                            if (_heapBuffer is null || receivedBytes == 0 || receivedFrom.EqualTo(udp.LocalEndPoint))
                                 continue;
-                            if (!_epsRates.ContainsKey(receivedFrom))
+
+                            if (!_epsRates.ContainsKey(receivedFrom) && _epsRates.Count < _maxConcurrentEndpoints)
                             {
                                 _epsRates.TryAdd(receivedFrom, new());
                                 _epsMaxCongestionWindow.TryAdd(receivedFrom, 0);
                                 _epsMaxUploadSpeed.TryAdd(receivedFrom, 0);
                             }
-                            _epsRates[receivedFrom].ReceivedBytesPerSecond += receivedBytes;
-                            _epsRates[receivedFrom].ReceivedPacketsPerSecond += 1;
+                            if (_epsRates.ContainsKey(receivedFrom))
+                            {
+                                _epsRates[receivedFrom].ReceivedBytesPerSecond += receivedBytes;
+                                _epsRates[receivedFrom].ReceivedPacketsPerSecond += 1;
+                            }
 
                             if (_heapBuffer is not null)
                                 _receivedData.Enqueue(new(receivedFrom, _heapBuffer.AsSpan().Slice(0, receivedBytes).ToArray()));
@@ -417,7 +415,7 @@ namespace RUDP
                 try
                 {
                     _emitRunning = true;
-                    while (udp is not null)
+                    while (!_token.IsCancellationRequested)
                         try
                         {
                             if (!_receivedData.TryDequeue(out RawData? pkt))
