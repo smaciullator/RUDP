@@ -7,170 +7,154 @@ namespace RUDP.Utilities
     internal class Header
     {
         internal const int _sigSize = 32;
-        internal const int _npubHexSize = 64;
-        internal static int _minSize => 1/*Type*/;
-        internal static int _minSignedSize => 1/*Type*/ + _sigSize;
+        internal static int _minSize => 1/*Type*/ + _sigSize;
 
 
         internal PacketType? Type { get; set; } = null;
         internal string? Signature { get; set; } = null;
-        internal string? NPubHex { get; set; } = null;
         internal uint? PacketIdentifier { get; set; } = null;
         internal uint? ChunkNumber { get; set; } = null;
-        //internal byte[]? IV { get; set; } = null;
         internal int Length => (Type.HasValue ? 1 : 0)
             + _sigSize
             + (PacketIdentifier.HasValue ? 4 : 0)
-            + (ChunkNumber.HasValue ? 4 : 0); // + (IV is not null ? 16 : 0);
+            + (ChunkNumber.HasValue ? 4 : 0);
 
 
-        internal static Header DATA(string hex, uint uniqueIdentifier, uint chunkNumber) //, byte[] ivBytes)
+        internal static Header DATA(string? sig, uint uniqueIdentifier, uint chunkNumber)
         {
             return new()
             {
                 Type = PacketType.DATA,
-                NPubHex = hex,
-                PacketIdentifier = uniqueIdentifier,
-                ChunkNumber = chunkNumber,
-                //IV = ivBytes
-            };
-        }
-        internal static Header STREAM(string hex) //byte[] ivBytes)
-        {
-            return new()
-            {
-                Type = PacketType.STREAM,
-                NPubHex = hex,
-                //IV = ivBytes
-            };
-        }
-        internal static Header RTTA(string hex, uint uniqueIdentifier)
-        {
-            return new()
-            {
-                Type = PacketType.RTTA,
-                PacketIdentifier = uniqueIdentifier
-            };
-        }
-        internal static Header RTTB(string hex, uint uniqueIdentifier)
-        {
-            return new()
-            {
-                Type = PacketType.RTTB,
-                PacketIdentifier = uniqueIdentifier
-            };
-        }
-        internal static Header ACKNOWLEDGEMENT(string hex, uint uniqueIdentifier, uint? chunkNumber)
-        {
-            return new()
-            {
-                Type = PacketType.ACKNOWLEDGEMENT,
+                Signature = sig,
                 PacketIdentifier = uniqueIdentifier,
                 ChunkNumber = chunkNumber
             };
         }
-        internal static Header MTU_DISCOVERY(string hex)
+        internal static Header STREAM(string? sig)
+        {
+            return new()
+            {
+                Type = PacketType.STREAM,
+                Signature = sig
+            };
+        }
+        internal static Header RTTA(string? sig, uint uniqueIdentifier)
+        {
+            return new()
+            {
+                Type = PacketType.RTTA,
+                Signature = sig,
+                PacketIdentifier = uniqueIdentifier
+            };
+        }
+        internal static Header RTTB(string? sig, uint uniqueIdentifier)
+        {
+            return new()
+            {
+                Type = PacketType.RTTB,
+                Signature = sig,
+                PacketIdentifier = uniqueIdentifier
+            };
+        }
+        internal static Header ACKNOWLEDGEMENT(string? sig, uint uniqueIdentifier, uint? chunkNumber)
+        {
+            return new()
+            {
+                Type = PacketType.ACKNOWLEDGEMENT,
+                Signature = sig,
+                PacketIdentifier = uniqueIdentifier,
+                ChunkNumber = chunkNumber
+            };
+        }
+        internal static Header MTU_DISCOVERY(string? sig, uint uniqueIdentifier)
         {
             return new()
             {
                 Type = PacketType.MTU_DISCOVERY,
-                NPubHex = hex
+                Signature = sig,
+                PacketIdentifier = uniqueIdentifier
             };
         }
-        internal static Header MTU_FOUND(string hex, uint uniqueIdentifier)
+        internal static Header MTU_FOUND(string? sig, uint uniqueIdentifier)
         {
             return new()
             {
                 Type = PacketType.MTU_FOUND,
-                PacketIdentifier = uniqueIdentifier
-            };
-        }
-        internal static Header HANDSHAKE(string? sig, uint uniqueIdentifier)
-        {
-            return new()
-            {
-                Type = PacketType.HANDSHAKE,
                 Signature = sig,
                 PacketIdentifier = uniqueIdentifier
             };
         }
-        internal static Header CONNECTION_CONFIRM(string? sig, uint uniqueIdentifier)
-        {
-            return new()
-            {
-                Type = PacketType.CONNECTION_CONFIRM,
-                Signature = sig,
-                PacketIdentifier = uniqueIdentifier
-            };
-        }
-        internal static Header P2P_COORDINATION_REQUEST(string hex, uint uniqueIdentifier)
+        internal static Header P2P_COORDINATION_REQUEST(string? sig, uint uniqueIdentifier)
         {
             return new()
             {
                 Type = PacketType.P2P_COORDINATION_REQUEST,
-                PacketIdentifier = uniqueIdentifier,
-                //IV = ivBytes
+                Signature = sig,
+                PacketIdentifier = uniqueIdentifier
             };
         }
-        internal static Header UNKNOWN_IDENTITY(string hex, uint uniqueIdentifier) //, byte[] ivBytes)
+        internal static Header UNKNOWN_IDENTITY(string? sig, uint uniqueIdentifier)
         {
             return new()
             {
                 Type = PacketType.UNKNOWN_IDENTITY,
-                PacketIdentifier = uniqueIdentifier,
-                //IV = ivBytes
+                Signature = sig,
+                PacketIdentifier = uniqueIdentifier
             };
         }
-        internal static Header P2P_CONNECTION_COORDINATION(string hex)
+        internal static Header P2P_CONNECTION_COORDINATION(string? sig, uint uniqueIdentifier)
         {
             return new()
             {
-                Type = PacketType.P2P_CONNECTION_COORDINATION
+                Type = PacketType.P2P_CONNECTION_COORDINATION,
+                Signature = sig,
+                PacketIdentifier = uniqueIdentifier
             };
         }
-        internal static Header CONNECTION_POSSIBLE(string hex)
+        internal static Header CONNECTION_POSSIBLE(string? sig)
         {
             return new()
             {
-                Type = PacketType.CONNECTION_POSSIBLE
+                Type = PacketType.CONNECTION_POSSIBLE,
+                Signature = sig
             };
         }
-        internal static Header DISCONNECTION(string hex, uint uniqueIdentifier) //, byte[] ivBytes)
+        internal static Header DISCONNECTION(string? sig, uint uniqueIdentifier)
         {
             return new()
             {
                 Type = PacketType.DISCONNECTION,
-                PacketIdentifier = uniqueIdentifier,
-                //IV = ivBytes
+                Signature = sig,
+                PacketIdentifier = uniqueIdentifier
             };
         }
-        internal static Header SIGNALING_PROPAGATION(string hex, uint uniqueIdentifier) //, byte[] ivBytes)
+        internal static Header SIGNALING_PROPAGATION(string? sig, uint uniqueIdentifier)
         {
             return new()
             {
                 Type = PacketType.SIGNALING_PROPAGATION,
-                PacketIdentifier = uniqueIdentifier,
-                //IV = ivBytes
+                Signature = sig,
+                PacketIdentifier = uniqueIdentifier
             };
         }
-        internal static Header FILE_PRESENTATION(string hex, uint uniqueIdentifier, uint chunkNumber) //, byte[] ivBytes)
+        internal static Header FILE_PRESENTATION(string? sig, uint uniqueIdentifier, uint chunkNumber)
         {
             return new()
             {
                 Type = PacketType.FILE_PRESENTATION,
+                Signature = sig,
                 PacketIdentifier = uniqueIdentifier,
-                ChunkNumber = chunkNumber,
-                //IV = ivBytes
+                ChunkNumber = chunkNumber
             };
         }
-        internal static Header FILE(string hex, uint uniqueIdentifier, uint chunkNumber) //, byte[] ivBytes)
+        internal static Header FILE(string? sig, uint uniqueIdentifier, uint chunkNumber)
         {
             return new()
             {
                 Type = PacketType.FILE,
+                Signature = sig,
                 PacketIdentifier = uniqueIdentifier,
-                ChunkNumber = chunkNumber,
-                //IV = ivBytes
+                ChunkNumber = chunkNumber
             };
         }
 
@@ -223,11 +207,11 @@ namespace RUDP.Utilities
                     if (span.Length > 5)
                         header.ChunkNumber = BitConverter.ToUInt32(span.Slice(_npubHexSizeBytes + 5, 4));
                     break;
-                case PacketType.MTU_DISCOVERY:
                 case PacketType.P2P_CONNECTION_COORDINATION:
                 case PacketType.CONNECTION_POSSIBLE:
                     break;
-                case PacketType.HANDSHAKE:
+                case PacketType.MTU_DISCOVERY:
+                case PacketType.MTU_FOUND:
                     header.Signature = Encoding.UTF8.GetString(span.Slice(1, _sigSize));
                     header.PacketIdentifier = BitConverter.ToUInt16(span.Slice(1 + _sigSize, 4));
                     break;
@@ -238,7 +222,6 @@ namespace RUDP.Utilities
                 case PacketType.SIGNALING_PROPAGATION:
                     header.PacketIdentifier = BitConverter.ToUInt16(span.Slice(_npubHexSizeBytes + 1, 4));
                     break;
-                case PacketType.MTU_FOUND:
                 case PacketType.RTTA:
                 case PacketType.RTTB:
                     header.PacketIdentifier = BitConverter.ToUInt16(span.Slice(_npubHexSizeBytes + 1, 4));

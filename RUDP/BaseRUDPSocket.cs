@@ -3,12 +3,10 @@ using RUDP.Extensions;
 using RUDP.Keys;
 using RUDP.Models;
 using RUDP.Utilities;
-using System;
 using System.Collections.Concurrent;
 using System.Data;
 using System.Diagnostics;
 using System.Net;
-using System.Reflection.PortableExecutable;
 using System.Text;
 
 namespace RUDP
@@ -163,7 +161,7 @@ namespace RUDP
         /// </summary>
         /// <param name="ep"></param>
         /// <param name="relativeIndex">0 = try connect with a Peer, 1,2,3 = try connect with a signaling server. If not specified and sent to a Signaling Server, the value will be interpreted as index 1</param>
-        public void TryConnectWith(EndPoint ep, byte relativeIndex = 0)
+        public void TryConnectWith(EndPoint ep, byte relativeIndex = 0, int secondsTimeout = 15)
         {
             // It create the new EndPoint informations, or not if already exist
             _epsInfo.AddOrUpdate(
@@ -181,7 +179,7 @@ namespace RUDP
             Task.Factory.StartNew(() =>
             {
                 Stopwatch limit = Stopwatch.StartNew();
-                while (limit.Elapsed.TotalSeconds < 10 && !_epsInfo[ep].IsConnected)
+                while (limit.Elapsed.TotalSeconds < secondsTimeout && !_epsInfo[ep].IsConnected)
                     ThreadUtilities.PauseThread(50);
                 limit.Stop();
 
@@ -233,8 +231,6 @@ namespace RUDP
             _epsInfo.TryRemove(ep, out _);
             socket?.DisconnectEndPoint(ep);
             OnConnectionClosed?.Invoke(ep, disconnectedNPubBech32);
-
-            //ThreadUtilities.PauseThread(1000);
         }
 
 
@@ -314,12 +310,7 @@ namespace RUDP
 
             try
             {
-                NPub npub = NPub.FromBech32(bech32PeerNPub);
-                byte[]? data = Body.TryEncryptData(Identity, GetEPNPub(sendTo), Body.P2P_COORDINATION_REQUEST(npub), out byte[] ivBytes);
-                if (data is null)
-                    return false;
-                _connectingToNPubs.TryAdd(bech32PeerNPub, 0);
-                return Send(sendTo, Header.P2P_COORDINATION_REQUEST(_epsInfo[sendTo].GetNextSendNumeration(), ivBytes), data, true);
+                return Send(sendTo, PacketUtilities.P2P_COORDINATION_REQUEST(Identity, _epsInfo[sendTo].GetNextSendNumeration(), NPub.FromBech32(bech32PeerNPub)), true);
             }
             catch
             {
@@ -337,13 +328,10 @@ namespace RUDP
         {
             if (!_epsInfo.ContainsKey(sendTo))
                 return false;
+
             try
             {
-                NPub npub = NPub.FromBech32(bech32PeerNPub);
-                byte[]? data = Body.TryEncryptData(Identity, GetEPNPub(sendTo), Body.UNKNOWN_IDENTITY(npub), out byte[] ivBytes);
-                if (data is null)
-                    return false;
-                return Send(sendTo, Header.UNKNOWN_IDENTITY(_epsInfo[sendTo].GetNextSendNumeration(), ivBytes), data, true);
+                return Send(sendTo, PacketUtilities.UNKNOWN_IDENTITY(Identity, _epsInfo[sendTo].GetNextSendNumeration(), NPub.FromBech32(bech32PeerNPub)), true);
             }
             catch
             {
@@ -363,10 +351,7 @@ namespace RUDP
         {
             try
             {
-                for (int i = 0; i < 10; i++)
-                    if (!Send(sendTo, Header.P2P_CONNECTION_COORDINATION(), Body.P2P_CONNECTION_COORDINATION(NPub.FromBech32(bech32PeerNPub), peerEP1, peerEP2, peerEP3), false))
-                        return false;
-                return true;
+                return Send(sendTo, PacketUtilities.P2P_CONNECTION_COORDINATION(Identity, _epsInfo[sendTo].GetNextSendNumeration(), NPub.FromBech32(bech32PeerNPub), peerEP1, peerEP2, peerEP3), true);
             }
             catch
             {
@@ -403,6 +388,7 @@ namespace RUDP
             if (!_epsInfo.ContainsKey(sendTo))
                 return false;
             Header header = Header.Deserialize(pkt);
+            return Send(sendTo, PacketUtilities.MTU_DISCOVERY(Identity, _epsInfo[sendTo].GetNextSendNumeration(), dataSize, relativeIndex), true);
             return Send(sendTo, Header.ACKNOWLEDGEMENT(header.PacketIdentifier ?? 0, header.ChunkNumber));
         }
         /// <summary>
@@ -416,7 +402,7 @@ namespace RUDP
         {
             if (!_epsInfo.ContainsKey(sendTo))
                 return false;
-            return Send(sendTo, PacketUtilities.MTU_DISCOVERY(Identity.NPub.Hex, dataSize, relativeIndex), true);
+            return Send(sendTo, PacketUtilities.MTU_DISCOVERY(Identity, _epsInfo[sendTo].GetNextSendNumeration(), dataSize, relativeIndex), true);
         }
         /// <summary>
         /// Send an MTUF (MTU Found) packet after an MTUD is received, to end the channel size discovery and set the size on both peers.
@@ -427,30 +413,7 @@ namespace RUDP
         {
             if (!_epsInfo.ContainsKey(sendTo))
                 return false;
-            return Send(sendTo, PacketUtilities.MTU_FOUND(Identity.NPub, _epsInfo[sendTo].GetNextSendNumeration(), dataLenght), true);
-        }
-        /// <summary>
-        /// Try to send an HNDS (Handshake) packet with the current secret set for this endpoint.
-        /// In case the secret doesn't exists nothing gets sent and return false.
-        /// </summary>
-        /// <param name="sendTo"></param>
-        /// <returns></returns>
-        private bool SendHandShake(EndPoint sendTo)
-        {
-            if (!_epsInfo.ContainsKey(sendTo))
-                return false;
-            return Send(sendTo, PacketUtilities.HANDSHAKE(Identity, _epsInfo[sendTo].GetNextSendNumeration()), true);
-        }
-        /// <summary>
-        /// Send a CNCF (Connection Confirm) packet to end the MTU Size Negotiation + Identity Check Phase
-        /// </summary>
-        /// <param name="sendTo"></param>
-        /// <returns></returns>
-        private bool SendConnectionConfirm(EndPoint sendTo)
-        {
-            if (!_epsInfo.ContainsKey(sendTo))
-                return false;
-            return Send(sendTo, PacketUtilities.CONNECTION_CONFIRM(Identity, _epsInfo[sendTo].GetNextSendNumeration(), SigServer), true);
+            return Send(sendTo, PacketUtilities.MTU_FOUND(Identity, _epsInfo[sendTo].GetNextSendNumeration(), dataLenght, SigServer), true);
         }
         /// <summary>
         /// Try to send a DISCONNECTION packet to do a collaborative disconnection with the other peer
@@ -461,10 +424,7 @@ namespace RUDP
         {
             if (!_epsInfo.ContainsKey(sendTo) || !_epsInfo[sendTo].IsConnected)
                 return false;
-            byte[]? data = Body.TryEncryptData(Identity, GetEPNPub(sendTo), Body.DISCONNECTION(_epsInfo[sendTo].SentSecret.Value, _epsInfo[sendTo].ReceivedSecret.Value), out byte[] ivBytes);
-            if (data is null)
-                return false;
-            return Send(sendTo, Header.DISCONNECTION(_epsInfo[sendTo].GetNextSendNumeration(), ivBytes), data, true);
+            return Send(sendTo, PacketUtilities.DISCONNECTION(Identity, _epsInfo[sendTo].GetNextSendNumeration()), true);
         }
         /// <summary>
         /// Try to send a propagation packet from this Signaling Server to every other known and connected Signaling Servers
@@ -765,7 +725,9 @@ namespace RUDP
                 return;
 
             Header header = Header.Deserialize(packet);
-            Span<byte> rawBody = new Span<byte>(packet).Slice(header.Length);
+            Span<byte> rawBody = default;
+            if (packet.Length > header.Length)
+                rawBody = new Span<byte>(packet).Slice(header.Length);
             string bech32 = "";
             if (_epsInfo.ContainsKey(receivedFrom))
                 bech32 = _epsInfo[receivedFrom].NPubBech32 ?? "";
@@ -852,46 +814,48 @@ namespace RUDP
 
                     if (!SigServer)
                         break;
-                    NPub? requesterNPub = GetEPNPub(receivedFrom);
-                    if (
-                        requesterNPub is null
-                        || !Body.P2P_COORDINATION_REQUEST(packet, Identity.NSec, requesterNPub, out string? targetBech32NPub)
-                        || string.IsNullOrEmpty(targetBech32NPub)
-                    )
+
+                    if (senderNPub is null || !PacketUtilities.IsSignatureValid(senderNPub, header, rawBody))
+                    {
+                        _epsInfo[receivedFrom].SetTrusted(false);
                         break;
-                    OnP2PCoordinationRequest?.Invoke(receivedFrom, requesterNPub.Bech32, targetBech32NPub);
+                    }
+
+                    if (!Body.P2P_COORDINATION_REQUEST(rawBody, out NPub? targetNPub_1) || targetNPub_1 is null)
+                        break;
+
+                    OnP2PCoordinationRequest?.Invoke(receivedFrom, senderNPub.Bech32, targetNPub_1.Bech32);
                     break;
                 case PacketType.UNKNOWN_IDENTITY:
                     SendAcknowledge(receivedFrom, packet);
 
-                    // Decrypt and excract body content
-                    if (!Body.UNKNOWN_IDENTITY(packet, Identity.NSec, GetEPNPub(receivedFrom), out string? bech32UnknownNPub) || bech32UnknownNPub == null)
+                    if (senderNPub is null || !PacketUtilities.IsSignatureValid(senderNPub, header, rawBody))
+                    {
+                        _epsInfo[receivedFrom].SetTrusted(false);
+                        break;
+                    }
+
+                    if (!Body.UNKNOWN_IDENTITY(rawBody, out NPub? targetNPub_2) || targetNPub_2 is null)
                         break;
 
-                    OnUnknownIdentity?.Invoke(receivedFrom, bech32UnknownNPub);
+                    OnUnknownIdentity?.Invoke(receivedFrom, targetNPub_2.Bech32);
                     break;
                 case PacketType.P2P_CONNECTION_COORDINATION:
                     SendAcknowledge(receivedFrom, packet);
 
+                    if (senderNPub is null || !PacketUtilities.IsSignatureValid(senderNPub, header, rawBody))
+                    {
+                        _epsInfo[receivedFrom].SetTrusted(false);
+                        break;
+                    }
+
                     if (
                         SigServer
-                        || !Body.P2P_CONNECTION_COORDINATION(packet, out NPub? p2pcNPub, out EndPoint? ep1, out EndPoint? ep2, out EndPoint? ep3)
-                        || p2pcNPub == null
+                        || !Body.P2P_CONNECTION_COORDINATION(rawBody, out NPub? p2pNPub, out EndPoint? ep1, out EndPoint? ep2, out EndPoint? ep3)
+                        || p2pNPub == null
                         || ep1 is null
                     )
                         break;
-
-                    // If we are receiving a coordination from a not-connected Signaling Server
-                    //if (!_epsInfo.ContainsKey(receivedFrom))
-                    //{
-                    //    if (!_coordinatingServers.ContainsKey(receivedFrom))
-                    //        _coordinatingServers.TryAdd(receivedFrom, new());
-                    //    // If we already received a not yet finished coordination from this Signaling Server for this specific endpoint
-                    //    if (_coordinatingServers[receivedFrom].Contains(ep1))
-                    //        break;
-                    //    // If this is the first time we receive this coordination from this Signaling Server
-                    //    _coordinatingServers.TryAdd(receivedFrom, new() { ep1 });
-                    //}
 
                     if (!_coordinatingServers.ContainsKey(receivedFrom))
                         _coordinatingServers.TryAdd(receivedFrom, new());
@@ -902,7 +866,6 @@ namespace RUDP
                     _coordinatingServers[receivedFrom].Add(ep1);
 
 
-                    // TODO: setup whitelist/blacklist
                     TryUdpHolePunch(receivedFrom, ep1, ep2, ep3);
                     break;
                 case PacketType.CONNECTION_POSSIBLE:
@@ -923,115 +886,63 @@ namespace RUDP
                     break;
                 case PacketType.MTU_DISCOVERY:
                     SendAcknowledge(receivedFrom, packet);
-                    // MTU Size is not big enough
+
                     if (packet.Length < Header._minSize)
                         break;
-                    if (!Body.MTU_DISCOVERY(packet, out NPub? npubMTUD, out byte relativeIndex) || npubMTUD is null)
+
+                    if (!Body.MTU_DISCOVERY(rawBody, out NPub? npubMTUD, out byte relativeIndex) || npubMTUD is null)
                         break;
+
+                    if (!PacketUtilities.IsSignatureValid(npubMTUD, header, rawBody))
+                    {
+                        _epsInfo[receivedFrom].SetTrusted(false);
+                        break;
+                    }
 
                     SetEPMTUSize(receivedFrom, Convert.ToUInt16(packet.Length));
                     _epsInfo[receivedFrom].SetNPub(npubMTUD);
                     _epsInfo[receivedFrom].SetAmIConnecting(false);
-                    SendMTUFound(receivedFrom, Convert.ToUInt16(packet.Length));
-
                     if (SigServer)
-                    {
-                        if (relativeIndex == 0)
-                            relativeIndex = 1;
-                        _epsInfo[receivedFrom].SetRelativeIndex(relativeIndex);
-                    }
+                        _epsInfo[receivedFrom].SetRelativeIndex(relativeIndex == 0 ? (byte)1 : relativeIndex);
+
+                    SendMTUFound(receivedFrom, Convert.ToUInt16(packet.Length));
                     break;
                 case PacketType.MTU_FOUND:
                     SendAcknowledge(receivedFrom, packet);
-                    if (!Body.MTU_FOUND(packet, out ushort? dataLength, out NPub? npubMTUF) || !dataLength.HasValue)
+
+                    if (senderNPub is null || !PacketUtilities.IsSignatureValid(senderNPub, header, rawBody))
+                    {
+                        _epsInfo[receivedFrom].SetTrusted(false);
                         break;
+                    }
+
+                    if (!Body.MTU_FOUND(rawBody, out ushort? dataLength, out bool? isSigServer) || !dataLength.HasValue || !isSigServer.HasValue)
+                        break;
+
                     SetEPMTUSize(receivedFrom, dataLength.Value);
-                    // TODO: se esiste già una NPub (es. connessione con un peer tramite sig-server) allora le due NPub devono coincidere
-                    _epsInfo[receivedFrom].SetNPub(npubMTUF);
-                    SendHandShake(receivedFrom);
-                    break;
-                case PacketType.HANDSHAKE:
-                    SendAcknowledge(receivedFrom, packet);
+                    _epsInfo[receivedFrom].SetTrusted(true);
+                    _epsInfo[receivedFrom].SetConnected(true);
+                    _epsInfo[receivedFrom].SetAmIConnecting(null);
+                    _epsInfo[receivedFrom].SetIsSigServer(isSigServer.Value);
 
-                    if (packet.Length < Header._minSignedSize)
-                        break;
-
-                    if (senderNPub is null || !PacketUtilities.IsSignatureValid(senderNPub, header, null))
-                    {
-                        _epsInfo[receivedFrom].SetTrusted(false);
-                        break;
-                    }
-
-                    if (!_epsInfo[receivedFrom].IsTrusted)
-                    {
-                        _epsInfo[receivedFrom].SetTrusted(true);
-
-                        if (_epsInfo[receivedFrom].AmIConnecting.HasValue && _epsInfo[receivedFrom].AmIConnecting.Value)
-                            SendConnectionConfirm(receivedFrom);
-                        else
-                            SendHandShake(receivedFrom);
-                    }
-                    break;
-                case PacketType.CONNECTION_CONFIRM:
-                    SendAcknowledge(receivedFrom, packet);
-
-                    if (packet.Length < Header._minSignedSize || rawBody.Length != 1)
-                        break;
-
-                    if (senderNPub is null || !PacketUtilities.IsSignatureValid(senderNPub, header, null))
-                    {
-                        _epsInfo[receivedFrom].SetTrusted(false);
-                        break;
-                    }
-
-                    if (IsEPTrusted(receivedFrom) && !_epsInfo[receivedFrom].IsConnected)
-                    {
-                        bool isSigServer = BitConverter.ToBoolean(rawBody);
-
-                        _epsInfo[receivedFrom].SetConnected(true);
-                        _epsInfo[receivedFrom].SetAmIConnecting(null);
-                        _epsInfo[receivedFrom].SetIsSigServer(isSigServer);
-
-                        SendConnectionConfirm(receivedFrom);
-
-                        if (_epsInfo[receivedFrom].RelativeIndex == 0)
-                            _epsInfo[receivedFrom].SetRelativeIndex(1);
-                        OnConnectionConfirmed?.Invoke(receivedFrom, senderNPub.Bech32, isSigServer, _epsInfo[receivedFrom].RelativeIndex);
-                    }
+                    OnConnectionConfirmed?.Invoke(receivedFrom, senderNPub.Bech32, isSigServer.Value, _epsInfo[receivedFrom].RelativeIndex);
                     break;
                 case PacketType.DISCONNECTION:
                     SendAcknowledge(receivedFrom, packet);
 
-                    ThreadUtilities.PauseThread(50);
-
-                    // Decrypt and excract body content
-                    if (!Body.DISCONNECTION(packet, Identity.NSec, GetEPNPub(receivedFrom), out int? sentSecret_D, out int? receivedSecret_D))
-                        break;
-
-                    // If sent or received or both secrets are missing this is not a collaborative disconnection
-                    if (!sentSecret_D.HasValue || !receivedSecret_D.HasValue)
-                        break;
-                    // If both secrets are present we can check the autenticity
-                    else
+                    if (senderNPub is null || !PacketUtilities.IsSignatureValid(senderNPub, header, rawBody))
                     {
-                        // If sent or received or both secrets doesn't match this is not a collaborative disconnection
-                        if (_epsInfo[receivedFrom].SentSecret != receivedSecret_D || _epsInfo[receivedFrom].ReceivedSecret != sentSecret_D)
-                            break;
-
-                        // If the other peer is asking me to disconnect
-                        if (!_epsInfo[receivedFrom].AmIDisconnecting.HasValue)
-                        {
-                            SendDisconnection(receivedFrom);
-                            _epsInfo[receivedFrom].SetAmIDisconnecting(false);
-                        }
-                        else
-                        {
-                            if (_epsInfo[receivedFrom].AmIDisconnecting.Value)
-                                SendDisconnection(receivedFrom);
-
-                            RemovePeerConnection(receivedFrom);
-                        }
+                        _epsInfo[receivedFrom].SetTrusted(false);
+                        break;
                     }
+
+                    if (!_epsInfo[receivedFrom].AmIDisconnecting.HasValue)
+                    {
+                        SendDisconnection(receivedFrom);
+                        RemovePeerConnection(receivedFrom);
+                    }
+                    else if (_epsInfo[receivedFrom].AmIDisconnecting.Value)
+                        RemovePeerConnection(receivedFrom);
                     break;
                 case PacketType.SIGNALING_PROPAGATION:
                     SendAcknowledge(receivedFrom, packet);
@@ -1043,7 +954,8 @@ namespace RUDP
 
                     OnSignalingPropagation?.Invoke(sigPeerEP, sigPeerNPub.Bech32, sigRelativeIndex);
                     break;
-            };
+            }
+            ;
         }
         private bool ManageChunks(EndPoint ep, Header header, byte[] packet, out byte[] fullData)
         {
@@ -1278,7 +1190,7 @@ namespace RUDP
                             // If this endpoint is not properly responding from a lot of time
                             if (ep.Value.NotResponding && ep.Value._rttaBuffer.Any(x => now - x.Value > ep.Value.NotRespondingAutoDisconnectionTime))
                             {
-                                // If no collaborative disconnectin was initiated we try to start one
+                                // If no collaborative disconnection was initiated we try to start one
                                 if (!ep.Value.AmIDisconnecting.HasValue)
                                     DisconnectFrom(ep.Key);
                                 // If a collaborative disconnection haas been already started we simply remove the connection

@@ -1,42 +1,11 @@
 ﻿using RUDP.Keys;
-using System.Reflection.PortableExecutable;
+using System.Net;
 using System.Security.Cryptography;
 
 namespace RUDP.Utilities
 {
     internal static class PacketUtilities
     {
-        private static KeyPair GetEphemeralKeys(string recipientNpubHex, out NPub ephemeralSharedNPub)
-        {
-            KeyPair eph_keys = KeyPair.GenerateNew();
-            ephemeralSharedNPub = eph_keys.NSec.DeriveSharedKey(NPub.FromHex(recipientNpubHex));
-            return eph_keys;
-        }
-
-
-        internal static bool IsSignatureValid(NPub npub, Header receivedHeader, byte[]? receivedBody = null)
-        {
-            string? signature = receivedHeader.Signature;
-            if (string.IsNullOrEmpty(signature))
-                return false;
-
-            receivedHeader.Signature = null;
-            byte[] header = receivedHeader.Serialize();
-            byte[] body = new byte[0];
-            if (receivedBody is not null)
-            {
-                body = new byte[receivedBody.Length];
-                Array.Copy(receivedBody, body, receivedBody.Length);
-            }
-
-            byte[] packet = new byte[header.Length + body.Length];
-            Array.Copy(header, 0, packet, 0, header.Length);
-            Array.Copy(header, 0, body, header.Length, body.Length);
-
-            return npub.IsHexSignatureValid(signature, packet);
-        }
-
-
         private static byte[] DeriveKeyAndIV(NSec nsec, NPub npub, out byte[] iv)
         {
             // Compute the shared secret (ECDH)
@@ -75,8 +44,6 @@ namespace RUDP.Utilities
 
             return decrypted;
         }
-
-
         private static Aes GetAesInstance(byte[] key, byte[] iv)
         {
             Aes aes = Aes.Create();
@@ -85,6 +52,36 @@ namespace RUDP.Utilities
             aes.Mode = CipherMode.CBC;
             aes.Padding = PaddingMode.PKCS7;
             return aes;
+        }
+
+
+        private static string? SignMessage(Header header, byte[] body, NSec senderKey)
+        {
+            header.Signature = null;
+            byte[] head = header.Serialize();
+            byte[] packet = new byte[head.Length + body.Length];
+
+            Array.Copy(head, 0, packet, 0, packet.Length);
+            Array.Copy(body, 0, packet, packet.Length, body.Length);
+
+            string? signature = senderKey.SignHex(packet);
+            return signature;
+        }
+        internal static bool IsSignatureValid(NPub npub, Header receivedHeader, Span<byte> receivedBody = new Span<byte>())
+        {
+            string? signature = receivedHeader.Signature;
+            if (string.IsNullOrEmpty(signature))
+                return false;
+
+            receivedHeader.Signature = null;
+            byte[] head = receivedHeader.Serialize();
+            byte[] body = receivedBody.ToArray();
+
+            byte[] packet = new byte[head.Length + body.Length];
+            Array.Copy(head, 0, packet, 0, head.Length);
+            Array.Copy(head, 0, body, head.Length, body.Length);
+
+            return npub.IsHexSignatureValid(signature, packet);
         }
 
 
@@ -102,47 +99,89 @@ namespace RUDP.Utilities
 
 
         internal static (Header header, byte[]? data) MTU_DISCOVERY(
-            string hex,
+            KeyPair senderKeys,
+            uint uniqueIdentifier,
             int dataSize,
             byte relativeIndex = 0)
         {
-            Header header = Header.MTU_DISCOVERY(hex);
+            Header header = Header.MTU_DISCOVERY(null, uniqueIdentifier);
             dataSize = dataSize - header.Length;
-            byte[] data = Body.MTU_DISCOVERY(dataSize, relativeIndex);
+            byte[] body = Body.MTU_DISCOVERY(senderKeys.NPub.Bech32, dataSize, relativeIndex);
 
-            return (header, data);
+            string? signature = SignMessage(header, body, senderKeys.NSec);
+            header = Header.MTU_DISCOVERY(signature, uniqueIdentifier);
+
+            return (header, body);
         }
         internal static (Header header, byte[]? data) MTU_FOUND(
-            NPub senderNPub,
+            KeyPair senderKeys,
             uint uniqueIdentifier,
-            ushort dataLenght)
+            ushort dataLenght,
+            bool isSigServer)
         {
-            Header header = Header.MTU_FOUND(senderNPub.Hex, uniqueIdentifier);
-            byte[] data = Body.MTU_FOUND(dataLenght, senderNPub);
-            return (header, data);
+            Header header = Header.MTU_FOUND(null, uniqueIdentifier);
+            byte[] body = Body.MTU_FOUND(dataLenght, isSigServer);
+
+            string? signature = SignMessage(header, body, senderKeys.NSec);
+            header = Header.MTU_FOUND(signature, uniqueIdentifier);
+
+            return (header, body);
         }
-        internal static (Header header, byte[]? data) HANDSHAKE(
+        internal static (Header header, byte[]? data) DISCONNECTION(
             KeyPair senderKeys,
             uint uniqueIdentifier)
         {
-            Header header = Header.HANDSHAKE(null, uniqueIdentifier);
-            byte[] plainBytes = header.Serialize();
+            Header header = Header.DISCONNECTION(null, uniqueIdentifier);
 
-            string? signature = senderKeys.NSec.SignHex(plainBytes);
-            header = Header.HANDSHAKE(signature, uniqueIdentifier);
+            string? signature = SignMessage(header, new byte[0], senderKeys.NSec);
+            header = Header.DISCONNECTION(signature, uniqueIdentifier);
+
             return (header, null);
         }
-        internal static (Header header, byte[]? data) CONNECTION_CONFIRM(
+
+
+        internal static (Header header, byte[]? data) P2P_COORDINATION_REQUEST(
             KeyPair senderKeys,
             uint uniqueIdentifier,
-            bool isSigServer)
+            NPub requestedNPub)
         {
-            Header header = Header.CONNECTION_CONFIRM(null, uniqueIdentifier);
-            byte[] plainBytes = header.Serialize();
+            Header header = Header.P2P_COORDINATION_REQUEST(null, uniqueIdentifier);
+            byte[] body = Body.P2P_COORDINATION_REQUEST(requestedNPub);
 
-            string? signature = senderKeys.NSec.SignHex(plainBytes);
-            header = Header.CONNECTION_CONFIRM(signature, uniqueIdentifier);
-            return (header, Body.CONNECTION_CONFIRM(isSigServer));
+            string? signature = SignMessage(header, body, senderKeys.NSec);
+            header = Header.P2P_COORDINATION_REQUEST(signature, uniqueIdentifier);
+
+            return (header, body);
         }
+        internal static (Header header, byte[]? data) UNKNOWN_IDENTITY(
+            KeyPair senderKeys,
+            uint uniqueIdentifier,
+            NPub requestedNPub)
+        {
+            Header header = Header.UNKNOWN_IDENTITY(null, uniqueIdentifier);
+            byte[] body = Body.UNKNOWN_IDENTITY(requestedNPub);
+
+            string? signature = SignMessage(header, body, senderKeys.NSec);
+            header = Header.UNKNOWN_IDENTITY(signature, uniqueIdentifier);
+
+            return (header, body);
+        }
+        internal static (Header header, byte[]? data) P2P_CONNECTION_COORDINATION(
+            KeyPair senderKeys,
+            uint uniqueIdentifier,
+            NPub targetNpub,
+            EndPoint? peerEP1, EndPoint? peerEP2, EndPoint? peerEP3)
+        {
+            Header header = Header.P2P_CONNECTION_COORDINATION(null, uniqueIdentifier);
+            byte[] body = Body.P2P_CONNECTION_COORDINATION(targetNpub, peerEP1, peerEP2, peerEP3);
+
+            string? signature = SignMessage(header, body, senderKeys.NSec);
+            header = Header.P2P_CONNECTION_COORDINATION(signature, uniqueIdentifier);
+
+            return (header, body);
+        }
+        
+
+
     }
 }
