@@ -138,18 +138,23 @@ namespace RUDP.Utilities
         }
 
 
-        internal static byte[] CONNECTION_POSSIBLE(NPub npub)
+        internal static byte[] CONNECTION_POSSIBLE(string nPubBech32)
         {
-            return npub.Bech32.UTF8AsByteArray();
+            return Encoding.UTF8.GetBytes(nPubBech32.Replace("npub1", ""));
         }
-        internal static bool CONNECTION_POSSIBLE(byte[] packet, out string? bech32NPub)
+        internal static bool CONNECTION_POSSIBLE(Span<byte> body, out NPub? npub)
         {
-            bech32NPub = null;
-            PacketType type = (PacketType)packet[0];
-            if (type != PacketType.CONNECTION_POSSIBLE)
-                return false;
-            bech32NPub = new Span<byte>(packet).Slice(Header.Deserialize(packet).Length, 63).ToArray().ToUTF8String();
-            return bech32NPub is not null;
+            npub = null;
+            string bech32 = body.Slice(0, 58).ToArray().ToUTF8String();
+            try
+            {
+                npub = string.IsNullOrEmpty(bech32) ? null : NPub.FromBech32($"npub1{bech32}");
+            }
+            catch
+            {
+                npub = null;
+            }
+            return npub is not null;
         }
 
 
@@ -234,15 +239,6 @@ namespace RUDP.Utilities
             peerEP = body.Slice(63, 21).ToArray().ToUTF8String().Replace("_", "").ToEndPoint();
             relativeIndex = body[^1];
             return peerNPub is not null && peerEP is not null && relativeIndex > 0;
-        }
-
-
-        internal static byte[]? TryEncryptData(KeyPair myIdentity, NPub? epNPub, byte[] clearData, out byte[] ivBytes)
-        {
-            ivBytes = new byte[0];
-            if (epNPub is not null)
-                return myIdentity.Encrypt(clearData, epNPub, out ivBytes);
-            return null;
         }
 
 

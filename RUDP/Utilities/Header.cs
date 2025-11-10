@@ -38,6 +38,26 @@ namespace RUDP.Utilities
                 Signature = sig
             };
         }
+        internal static Header FILE_PRESENTATION(string? sig, uint uniqueIdentifier, uint chunkNumber)
+        {
+            return new()
+            {
+                Type = PacketType.FILE_PRESENTATION,
+                Signature = sig,
+                PacketIdentifier = uniqueIdentifier,
+                ChunkNumber = chunkNumber
+            };
+        }
+        internal static Header FILE(string? sig, uint uniqueIdentifier, uint chunkNumber)
+        {
+            return new()
+            {
+                Type = PacketType.FILE,
+                Signature = sig,
+                PacketIdentifier = uniqueIdentifier,
+                ChunkNumber = chunkNumber
+            };
+        }
         internal static Header RTTA(string? sig, uint uniqueIdentifier)
         {
             return new()
@@ -137,26 +157,6 @@ namespace RUDP.Utilities
                 PacketIdentifier = uniqueIdentifier
             };
         }
-        internal static Header FILE_PRESENTATION(string? sig, uint uniqueIdentifier, uint chunkNumber)
-        {
-            return new()
-            {
-                Type = PacketType.FILE_PRESENTATION,
-                Signature = sig,
-                PacketIdentifier = uniqueIdentifier,
-                ChunkNumber = chunkNumber
-            };
-        }
-        internal static Header FILE(string? sig, uint uniqueIdentifier, uint chunkNumber)
-        {
-            return new()
-            {
-                Type = PacketType.FILE,
-                Signature = sig,
-                PacketIdentifier = uniqueIdentifier,
-                ChunkNumber = chunkNumber
-            };
-        }
 
 
         internal byte[] Serialize()
@@ -194,39 +194,40 @@ namespace RUDP.Utilities
             switch (header.Type)
             {
                 case PacketType.DATA:
-                    header.PacketIdentifier = BitConverter.ToUInt16(span.Slice(_npubHexSizeBytes + 1, 4));
-                    header.ChunkNumber = BitConverter.ToUInt32(span.Slice(_npubHexSizeBytes + 5, 4));
-                    //if (header.ChunkNumber <= 1)
-                    //    header.IV = span.Slice(9, 16).ToArray();
+                case PacketType.FILE_PRESENTATION:
+                case PacketType.FILE:
+                    header.Signature = Encoding.UTF8.GetString(span.Slice(1, _sigSize));
+                    header.PacketIdentifier = BitConverter.ToUInt16(span.Slice(1 + _sigSize, 4));
+                    header.ChunkNumber = BitConverter.ToUInt32(span.Slice(1 + _sigSize + 4, 4));
                     break;
                 case PacketType.STREAM:
-                    //header.IV = span.Slice(1, 16).ToArray();
+                    header.Signature = Encoding.UTF8.GetString(span.Slice(1, _sigSize));
                     break;
                 case PacketType.ACKNOWLEDGEMENT:
-                    header.PacketIdentifier = BitConverter.ToUInt16(span.Slice(_npubHexSizeBytes + 1, 4));
-                    if (span.Length > 5)
-                        header.ChunkNumber = BitConverter.ToUInt32(span.Slice(_npubHexSizeBytes + 5, 4));
+                    header.Signature = Encoding.UTF8.GetString(span.Slice(1, _sigSize));
+                    header.PacketIdentifier = BitConverter.ToUInt16(span.Slice(1 + _sigSize, 4));
+                    if (span.Length > 1 + _sigSize + 4)
+                        header.ChunkNumber = BitConverter.ToUInt32(span.Slice(1 + _sigSize + 4, 4));
                     break;
-                case PacketType.P2P_CONNECTION_COORDINATION:
                 case PacketType.CONNECTION_POSSIBLE:
+                    header.Signature = Encoding.UTF8.GetString(span.Slice(1, _sigSize));
                     break;
                 case PacketType.MTU_DISCOVERY:
                 case PacketType.MTU_FOUND:
-                    header.Signature = Encoding.UTF8.GetString(span.Slice(1, _sigSize));
-                    header.PacketIdentifier = BitConverter.ToUInt16(span.Slice(1 + _sigSize, 4));
-                    break;
-                case PacketType.CONNECTION_CONFIRM:
+                case PacketType.P2P_CONNECTION_COORDINATION:
                 case PacketType.P2P_COORDINATION_REQUEST:
                 case PacketType.UNKNOWN_IDENTITY:
                 case PacketType.DISCONNECTION:
+                case PacketType.RTTA:
+                case PacketType.RTTB:
+                    header.Signature = Encoding.UTF8.GetString(span.Slice(1, _sigSize));
+                    header.PacketIdentifier = BitConverter.ToUInt16(span.Slice(1 + _sigSize, 4));
+                    break;
                 case PacketType.SIGNALING_PROPAGATION:
                     header.PacketIdentifier = BitConverter.ToUInt16(span.Slice(_npubHexSizeBytes + 1, 4));
                     break;
-                case PacketType.RTTA:
-                case PacketType.RTTB:
-                    header.PacketIdentifier = BitConverter.ToUInt16(span.Slice(_npubHexSizeBytes + 1, 4));
+                default:
                     break;
-            }
             return header;
         }
     }

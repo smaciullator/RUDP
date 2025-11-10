@@ -10,7 +10,6 @@ namespace RUDP.Models
     {
         public EndPoint EndPoint { get; private set; }
         public string IPV4Address => EndPoint is null ? "" : EndPoint.ToIPV4String();
-        public bool IsConnectionPossible { get; private set; } = false;
         public bool IsTrusted { get; private set; } = false;
         public bool IsConnected { get; private set; } = false;
         public bool IsSigServer { get; private set; } = false;
@@ -180,11 +179,6 @@ namespace RUDP.Models
         }
 
 
-        internal EPInfo SetIsConnectionPossible(bool isConnectionPossible)
-        {
-            IsConnectionPossible = isConnectionPossible;
-            return this;
-        }
         internal EPInfo SetConnected(bool isConnected)
         {
             IsConnected = isConnected;

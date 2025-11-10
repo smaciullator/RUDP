@@ -24,7 +24,7 @@ namespace RUDP.Utilities
 
             return key;
         }
-        private static byte[] EncryptMessage(byte[] plainBytes, NSec nsec, NPub npub)
+        internal static byte[] EncryptMessage(byte[] plainBytes, NSec nsec, NPub npub)
         {
             byte[] key = DeriveKeyAndIV(nsec, npub, out byte[] iv);
 
@@ -98,11 +98,51 @@ namespace RUDP.Utilities
         }
 
 
+        internal static (Header header, byte[]? data) RTTA(
+            KeyPair senderKeys,
+            uint uniqueIdentifier
+        )
+        {
+            Header header = Header.RTTA(null, uniqueIdentifier);
+
+            string? signature = SignMessage(header, new byte[0], senderKeys.NSec);
+            header = Header.RTTA(signature, uniqueIdentifier);
+
+            return (header, null);
+        }
+        internal static (Header header, byte[]? data) RTTB(
+            KeyPair senderKeys,
+            uint uniqueIdentifier
+        )
+        {
+            Header header = Header.RTTB(null, uniqueIdentifier);
+
+            string? signature = SignMessage(header, new byte[0], senderKeys.NSec);
+            header = Header.RTTB(signature, uniqueIdentifier);
+
+            return (header, null);
+        }
+        internal static (Header header, byte[]? body) ACKNOWLEDGEMENT(
+            KeyPair senderKeys,
+            uint uniqueIdentifier,
+            uint? chunkNumber
+        )
+        {
+            Header header = Header.ACKNOWLEDGEMENT(null, uniqueIdentifier, chunkNumber);
+
+            string? signature = SignMessage(header, new byte[0], senderKeys.NSec);
+            header = Header.ACKNOWLEDGEMENT(signature, uniqueIdentifier, chunkNumber);
+
+            return (header, null);
+        }
+
+
         internal static (Header header, byte[]? data) MTU_DISCOVERY(
             KeyPair senderKeys,
             uint uniqueIdentifier,
             int dataSize,
-            byte relativeIndex = 0)
+            byte relativeIndex = 0
+        )
         {
             Header header = Header.MTU_DISCOVERY(null, uniqueIdentifier);
             dataSize = dataSize - header.Length;
@@ -117,7 +157,8 @@ namespace RUDP.Utilities
             KeyPair senderKeys,
             uint uniqueIdentifier,
             ushort dataLenght,
-            bool isSigServer)
+            bool isSigServer
+        )
         {
             Header header = Header.MTU_FOUND(null, uniqueIdentifier);
             byte[] body = Body.MTU_FOUND(dataLenght, isSigServer);
@@ -129,7 +170,8 @@ namespace RUDP.Utilities
         }
         internal static (Header header, byte[]? data) DISCONNECTION(
             KeyPair senderKeys,
-            uint uniqueIdentifier)
+            uint uniqueIdentifier
+        )
         {
             Header header = Header.DISCONNECTION(null, uniqueIdentifier);
 
@@ -143,7 +185,8 @@ namespace RUDP.Utilities
         internal static (Header header, byte[]? data) P2P_COORDINATION_REQUEST(
             KeyPair senderKeys,
             uint uniqueIdentifier,
-            NPub requestedNPub)
+            NPub requestedNPub
+        )
         {
             Header header = Header.P2P_COORDINATION_REQUEST(null, uniqueIdentifier);
             byte[] body = Body.P2P_COORDINATION_REQUEST(requestedNPub);
@@ -156,7 +199,8 @@ namespace RUDP.Utilities
         internal static (Header header, byte[]? data) UNKNOWN_IDENTITY(
             KeyPair senderKeys,
             uint uniqueIdentifier,
-            NPub requestedNPub)
+            NPub requestedNPub
+        )
         {
             Header header = Header.UNKNOWN_IDENTITY(null, uniqueIdentifier);
             byte[] body = Body.UNKNOWN_IDENTITY(requestedNPub);
@@ -170,7 +214,8 @@ namespace RUDP.Utilities
             KeyPair senderKeys,
             uint uniqueIdentifier,
             NPub targetNpub,
-            EndPoint? peerEP1, EndPoint? peerEP2, EndPoint? peerEP3)
+            EndPoint? peerEP1, EndPoint? peerEP2, EndPoint? peerEP3
+        )
         {
             Header header = Header.P2P_CONNECTION_COORDINATION(null, uniqueIdentifier);
             byte[] body = Body.P2P_CONNECTION_COORDINATION(targetNpub, peerEP1, peerEP2, peerEP3);
@@ -180,8 +225,79 @@ namespace RUDP.Utilities
 
             return (header, body);
         }
-        
+        internal static (Header header, byte[]? data) CONNECTION_POSSIBLE(KeyPair senderKeys)
+        {
+            Header header = Header.CONNECTION_POSSIBLE(null);
+            byte[] body = Body.CONNECTION_POSSIBLE(senderKeys.NPub.Bech32);
+
+            string? signature = SignMessage(header, body, senderKeys.NSec);
+            header = Header.CONNECTION_POSSIBLE(signature);
+
+            return (header, body);
+        }
 
 
+        internal static (Header header, byte[]? data) DATA(
+            KeyPair senderKeys,
+            uint uniqueIdentifier,
+            uint chunkNumber,
+            byte[] rawData,
+            NPub targetNpub
+        )
+        {
+            Header header = Header.DATA(null, uniqueIdentifier, chunkNumber);
+            byte[] body = EncryptMessage(rawData, senderKeys.NSec, targetNpub);
+
+            string? signature = SignMessage(header, body, senderKeys.NSec);
+            header = Header.DATA(signature, uniqueIdentifier, chunkNumber);
+
+            return (header, body);
+        }
+        internal static (Header header, byte[]? data) STREAM(
+            KeyPair senderKeys,
+            byte[] rawData,
+            NPub targetNpub
+        )
+        {
+            Header header = Header.STREAM(null);
+            byte[] body = EncryptMessage(rawData, senderKeys.NSec, targetNpub);
+
+            string? signature = SignMessage(header, body, senderKeys.NSec);
+            header = Header.STREAM(signature);
+
+            return (header, body);
+        }
+        internal static (Header header, byte[]? data) FILE_PRESENTATION(
+            KeyPair senderKeys,
+            uint uniqueIdentifier,
+            uint chunkNumber,
+            byte[] rawData,
+            NPub targetNpub
+        )
+        {
+            Header header = Header.FILE_PRESENTATION(null, uniqueIdentifier, chunkNumber);
+            byte[] body = EncryptMessage(rawData, senderKeys.NSec, targetNpub);
+
+            string? signature = SignMessage(header, body, senderKeys.NSec);
+            header = Header.FILE_PRESENTATION(signature, uniqueIdentifier, chunkNumber);
+
+            return (header, body);
+        }
+        internal static (Header header, byte[]? data) FILE(
+            KeyPair senderKeys,
+            uint uniqueIdentifier,
+            uint chunkNumber,
+            byte[] rawData,
+            NPub targetNpub
+        )
+        {
+            Header header = Header.FILE(null, uniqueIdentifier, chunkNumber);
+            byte[] body = EncryptMessage(rawData, senderKeys.NSec, targetNpub);
+
+            string? signature = SignMessage(header, body, senderKeys.NSec);
+            header = Header.FILE(signature, uniqueIdentifier, chunkNumber);
+
+            return (header, body);
+        }
     }
 }

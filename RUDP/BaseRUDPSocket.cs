@@ -8,6 +8,7 @@ using System.Data;
 using System.Diagnostics;
 using System.Net;
 using System.Text;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace RUDP
 {
@@ -246,10 +247,7 @@ namespace RUDP
         {
             if (!_epsInfo.ContainsKey(sendTo))
                 return false;
-            byte[]? data = Body.TryEncryptData(Identity, GetEPNPub(sendTo), rawData, out byte[] ivBytes);
-            if (data is null)
-                return false;
-            return Send(sendTo, Header.DATA(_epsInfo[sendTo].GetNextSendNumeration(), 0, ivBytes), data, true);
+            return Send(sendTo, PacketUtilities.DATA(Identity, _epsInfo[sendTo].GetNextSendNumeration(), 0, rawData, GetEPNPub(sendTo)), true);
         }
         /// <summary>
         /// Send a stream to the specified endpoint.
@@ -263,10 +261,7 @@ namespace RUDP
         {
             if (!_epsInfo.ContainsKey(sendTo))
                 return false;
-            byte[]? data = Body.TryEncryptData(Identity, GetEPNPub(sendTo), rawData, out byte[] ivBytes);
-            if (data is null)
-                return false;
-            return Send(sendTo, Header.STREAM(ivBytes), data);
+            return Send(sendTo, PacketUtilities.STREAM(Identity, rawData, GetEPNPub(sendTo)));
         }
         /// <summary>
         /// Send an RTTA Packet and store its timestamp for subsequent channel latency statistics
@@ -279,7 +274,7 @@ namespace RUDP
                 return false;
             uint num = _epsInfo[sendTo].GetNextSendNumeration();
             _epsInfo.AddOrUpdate(sendTo, addValue: new(sendTo), updateValueFactory: (endpoint, value) => value.AddRTTA(num));
-            return Send(sendTo, Header.RTTA(num));
+            return Send(sendTo, PacketUtilities.RTTA(Identity, num));
         }
         /// <summary>
         /// Send an RTTB packet with the same packet identifier of the corresponding RTTA packet received
@@ -293,7 +288,7 @@ namespace RUDP
                 return false;
             uint? num = Header.Deserialize(RTTA).PacketIdentifier;
             if (num.HasValue)
-                return Send(sendTo, Header.RTTB(num.Value));
+                return Send(sendTo, PacketUtilities.RTTB(Identity, num.Value));
             return false;
         }
         /// <summary>
@@ -310,6 +305,7 @@ namespace RUDP
 
             try
             {
+                _connectingToNPubs.TryAdd(bech32PeerNPub, 0);
                 return Send(sendTo, PacketUtilities.P2P_COORDINATION_REQUEST(Identity, _epsInfo[sendTo].GetNextSendNumeration(), NPub.FromBech32(bech32PeerNPub)), true);
             }
             catch
@@ -358,23 +354,16 @@ namespace RUDP
                 return false;
             }
         }
-        /// <summary>
-        /// Used by the peers during the UDP Hole Punching phase, it's a 1 byte packet
-        /// </summary>
-        /// <param name="sendTo"></param>
-        /// <returns></returns>
-        private bool SendConnectionPossible(EndPoint sendTo)
+        public bool SendConnectionPossible(EndPoint sendTo)
         {
-            // NOTE: this packet MUST be sent even if we don't already have it on _epsInfo
-            return Send(sendTo, Header.CONNECTION_POSSIBLE(), Body.CONNECTION_POSSIBLE(Identity.NPub), false);
-
-            //// We send directly because we don't yet know for sure the peer endpoint
-            //byte[] header = Header.CONNECTION_POSSIBLE().Serialize();
-            //byte[] body = Body.CONNECTION_POSSIBLE(Identity.NPub);
-            //byte[] packet = new byte[header.Length + body.Length];
-            //Array.Copy(header, 0, packet, 0, header.Length);
-            //Array.Copy(body, 0, packet, header.Length, body.Length);
-            //return socket.Send(sendTo, packet);
+            try
+            {
+                return Send(sendTo, PacketUtilities.CONNECTION_POSSIBLE(Identity), false);
+            }
+            catch
+            {
+                return false;
+            }
         }
         /// <summary>
         /// Send the ACKL packet to the specified endpoint.
@@ -388,8 +377,7 @@ namespace RUDP
             if (!_epsInfo.ContainsKey(sendTo))
                 return false;
             Header header = Header.Deserialize(pkt);
-            return Send(sendTo, PacketUtilities.MTU_DISCOVERY(Identity, _epsInfo[sendTo].GetNextSendNumeration(), dataSize, relativeIndex), true);
-            return Send(sendTo, Header.ACKNOWLEDGEMENT(header.PacketIdentifier ?? 0, header.ChunkNumber));
+            return Send(sendTo, PacketUtilities.ACKNOWLEDGEMENT(Identity, header.PacketIdentifier ?? 0, header.ChunkNumber));
         }
         /// <summary>
         /// Send an MTUD (MTU Discovery) packet to begin the channel size discovery with a peer
@@ -475,9 +463,6 @@ namespace RUDP
             Array.Copy(cn, 0, body, 0, cn.Length);
             Array.Copy(fileName, 0, body, cn.Length, fileName.Length);
 
-            byte[]? data = Body.TryEncryptData(Identity, GetEPNPub(sendTo), body, out byte[] ivBytes);
-            if (data is null)
-                return false;
             uint uniqueIdentifier = _epsInfo[sendTo].GetNextSendNumeration();
             _sendingFiles.AddOrUpdate(
                 uniqueIdentifier,
@@ -485,16 +470,14 @@ namespace RUDP
                 addValue: new(fileFullPath, chunksNumber),
                 updateValueFactory: (identifier, value) => value
             );
-            return Send(sendTo, Header.FILE_PRESENTATION(uniqueIdentifier, 0, ivBytes), data, true);
+            return Send(sendTo, PacketUtilities.FILE_PRESENTATION(Identity, uniqueIdentifier, 0, body, GetEPNPub(sendTo)), true);
         }
         private bool SendFile(EndPoint sendTo, byte[] chunk)
         {
             if (!_epsInfo.ContainsKey(sendTo))
                 return false;
-            byte[]? data = Body.TryEncryptData(Identity, GetEPNPub(sendTo), chunk, out byte[] ivBytes);
-            if (data is null)
-                return false;
-            return Send(sendTo, Header.FILE(_epsInfo[sendTo].GetNextSendNumeration(), 0, ivBytes), data, true);
+
+            return Send(sendTo, PacketUtilities.FILE(Identity, _epsInfo[sendTo].GetNextSendNumeration(), 0, chunk, GetEPNPub(sendTo)), true);
         }
 
         private void ManageFilePresentation(uint packetIdentifier, byte[] decryptedData)
@@ -743,10 +726,16 @@ namespace RUDP
                     if (SigServer || !header.PacketIdentifier.HasValue || !header.ChunkNumber.HasValue)
                         break;
 
+                    if (senderNPub is null || !PacketUtilities.IsSignatureValid(senderNPub, header, rawBody))
+                    {
+                        _epsInfo[receivedFrom].SetTrusted(false);
+                        break;
+                    }
+
                     // If it's not a chunked packet
                     if (header.ChunkNumber == 0)
                     {
-                        byte[] decryptedData = Identity.NSec.Decrypt(Body.ExtractFromPacket(packet), header.IV, GetEPNPub(receivedFrom));
+                        byte[] decryptedData = PacketUtilities.DecryptMessage(Body.ExtractFromPacket(packet), Identity.NSec, senderNPub);
                         if (header.Type == PacketType.DATA)
                             OnData?.Invoke(receivedFrom, bech32, decryptedData, timestamp);
                         else if (header.Type == PacketType.FILE_PRESENTATION)
@@ -768,11 +757,24 @@ namespace RUDP
                 case PacketType.STREAM:
                     if (SigServer)
                         break;
-                    OnStream?.Invoke(receivedFrom, bech32, Identity.NSec.Decrypt(Body.ExtractFromPacket(packet), header.IV, GetEPNPub(receivedFrom)), timestamp);
+
+                    if (senderNPub is null || !PacketUtilities.IsSignatureValid(senderNPub, header, rawBody))
+                    {
+                        _epsInfo[receivedFrom].SetTrusted(false);
+                        break;
+                    }
+
+                    byte[] decryptedStream = PacketUtilities.DecryptMessage(Body.ExtractFromPacket(packet), Identity.NSec, senderNPub);
+
+                    OnStream?.Invoke(receivedFrom, bech32, decryptedStream, timestamp);
                     break;
                 case PacketType.ACKNOWLEDGEMENT:
-                    if (!_epsInfo.ContainsKey(receivedFrom))
+                    if (senderNPub is null || !PacketUtilities.IsSignatureValid(senderNPub, header, rawBody))
+                    {
+                        _epsInfo[receivedFrom].SetTrusted(false);
                         break;
+                    }
+
                     _epsInfo[receivedFrom]._unack.TryRemove(new UnackData(packet).UID, out UnackData? data);
                     if (data is not null)
                     {
@@ -798,9 +800,21 @@ namespace RUDP
                     }
                     break;
                 case PacketType.RTTA:
+                    if (senderNPub is null || !PacketUtilities.IsSignatureValid(senderNPub, header, rawBody))
+                    {
+                        _epsInfo[receivedFrom].SetTrusted(false);
+                        break;
+                    }
+
                     SendRTTB(receivedFrom, packet);
                     break;
                 case PacketType.RTTB:
+                    if (senderNPub is null || !PacketUtilities.IsSignatureValid(senderNPub, header, rawBody))
+                    {
+                        _epsInfo[receivedFrom].SetTrusted(false);
+                        break;
+                    }
+
                     uint? num = Header.Deserialize(packet).PacketIdentifier;
                     if (!num.HasValue)
                         break;
@@ -835,7 +849,11 @@ namespace RUDP
                         break;
                     }
 
-                    if (!Body.UNKNOWN_IDENTITY(rawBody, out NPub? targetNPub_2) || targetNPub_2 is null)
+                    if (
+                        SigServer
+                        || !Body.UNKNOWN_IDENTITY(rawBody, out NPub? targetNPub_2)
+                        || targetNPub_2 is null
+                    )
                         break;
 
                     OnUnknownIdentity?.Invoke(receivedFrom, targetNPub_2.Bech32);
@@ -865,24 +883,26 @@ namespace RUDP
                     // If this is the first time we receive this coordination from this Signaling Server
                     _coordinatingServers[receivedFrom].Add(ep1);
 
-
                     TryUdpHolePunch(receivedFrom, ep1, ep2, ep3);
                     break;
                 case PacketType.CONNECTION_POSSIBLE:
-                    if (SigServer || (_epsInfo.ContainsKey(receivedFrom) && _epsInfo[receivedFrom].IsConnectionPossible))
+                    if (packet.Length < Header._minSize)
                         break;
 
-                    if (!Body.CONNECTION_POSSIBLE(packet, out string? bech32CpNPub) || string.IsNullOrEmpty(bech32CpNPub))
+                    if (SigServer || _epsInfo.ContainsKey(receivedFrom))
                         break;
 
-                    _epsInfo.TryAdd(receivedFrom, new(receivedFrom));
-                    _epsInfo[receivedFrom].SetIsConnectionPossible(true);
-                    _epsInfo[receivedFrom].SetNPub(NPub.FromBech32(bech32CpNPub));
+                    if (!Body.CONNECTION_POSSIBLE(rawBody, out NPub? npubCNPO) || npubCNPO is null)
+                        break;
 
-                    if (_connectingToNPubs.ContainsKey(bech32CpNPub))
-                        OnP2PConnectionPossible?.Invoke(receivedFrom, bech32CpNPub);
+                    if (!PacketUtilities.IsSignatureValid(npubCNPO, header, rawBody))
+                        break;
+
+                    // If it's me who started this connection attempt
+                    if (_connectingToNPubs.ContainsKey(npubCNPO.Bech32))
+                        OnP2PConnectionPossible?.Invoke(receivedFrom, npubCNPO.Bech32);
                     else
-                        OnP2PConnectionRequest?.Invoke(receivedFrom, bech32CpNPub);
+                        OnP2PConnectionRequest?.Invoke(receivedFrom, npubCNPO.Bech32);
                     break;
                 case PacketType.MTU_DISCOVERY:
                     SendAcknowledge(receivedFrom, packet);
@@ -964,9 +984,6 @@ namespace RUDP
             // If it's the first packet
             if (header.ChunkNumber == 1)
             {
-                if (header.IV is null)
-                    return false;
-
                 // We extract the expected chunks
                 byte[] body = Body.ExtractFromPacket(packet);
                 uint totalChunks = BitConverter.ToUInt32(body);
@@ -1053,6 +1070,7 @@ namespace RUDP
                 _epsInfo[ep]._chunks[header.PacketIdentifier.Value].Clear();
                 _epsInfo[ep]._chunks.Remove(header.PacketIdentifier.Value, out _);
 
+                fullData = PacketUtilities.DecryptMessage(encryptedBody, Identity.NSec, GetEPNPub(ep));
                 fullData = Identity.NSec.Decrypt(encryptedBody, IV, GetEPNPub(ep));
                 return true;
             }
@@ -1114,7 +1132,7 @@ namespace RUDP
             Task.Factory.StartNew(() =>
             {
                 Stopwatch limit = Stopwatch.StartNew();
-                while (limit.Elapsed.TotalSeconds < 5 && !_epsInfo.ContainsKey(remoteEP))
+                while (limit.Elapsed.TotalSeconds < 15 && !_epsInfo.ContainsKey(remoteEP))
                 {
                     // Send multiple packet in case they get dropped
                     SendConnectionPossible(remoteEP);
