@@ -75,7 +75,7 @@ namespace RUDP.Keys
         {
             if (data is null || data.Length == 0)
                 return null;
-            return !Ec.TrySignBIP340(data, null, out SecpSchnorrSignature? signature) || signature is null ? null : signature.ToBytes().ToHexString();
+            return !Ec.TrySignBIP340(data.GetSha256(), null, out SecpSchnorrSignature? signature) || signature is null ? null : signature.ToBytes().ToHexString();
         }
 
 

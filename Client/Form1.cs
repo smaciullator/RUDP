@@ -5,9 +5,7 @@ using RUDP;
 using RUDP.Enums;
 using RUDP.Extensions;
 using RUDP.Models;
-using RUDP.Utilities;
 using System.Collections.Concurrent;
-using System.Diagnostics;
 using System.Net;
 
 namespace Client
@@ -222,7 +220,8 @@ namespace Client
                                 _socket.SendData(localEP, new byte[500]);
                                 _disconnectionSemaphore.Release();
                             }
-                            catch {
+                            catch
+                            {
                                 _disconnectionSemaphore.Release();
                             }
                     }, TaskCreationOptions.LongRunning);

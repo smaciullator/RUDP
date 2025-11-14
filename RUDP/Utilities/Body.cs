@@ -1,5 +1,4 @@
-﻿using RUDP.Enums;
-using RUDP.Extensions;
+﻿using RUDP.Extensions;
 using RUDP.Keys;
 using System.Net;
 using System.Text;
@@ -11,10 +10,10 @@ namespace RUDP.Utilities
         internal static byte[] MTU_DISCOVERY(string nPubBech32, int dataSize, byte relativeIndex = 0)
         {
             byte[] body = new byte[dataSize];
-            byte[] hex = Encoding.UTF8.GetBytes(nPubBech32.Replace("npub1", ""));
-            Array.Copy(hex, 0, body, 0, hex.Length);
-            body[hex.Length] = relativeIndex;
-            hex = new byte[0];
+            byte[] bech32 = nPubBech32.Replace("npub1", "").UTF8AsByteArray();
+            Array.Copy(bech32, 0, body, 0, bech32.Length);
+            body[bech32.Length] = relativeIndex;
+            bech32 = new byte[0];
             return body;
         }
         internal static bool MTU_DISCOVERY(Span<byte> body, out NPub? npub, out byte relativeIndex)
@@ -34,22 +33,33 @@ namespace RUDP.Utilities
             return npub is not null;
         }
 
-
-        internal static byte[] MTU_FOUND(int dataLenght, bool isSigServer)
+        internal static byte[] MTU_FOUND(string nPubBech32, ushort dataLenght, bool isSigServer)
         {
+            byte[] bech32 = nPubBech32.Replace("npub1", "").UTF8AsByteArray();
             byte[] dl = BitConverter.GetBytes(dataLenght);
 
-            byte[] body = new byte[dl.Length + 1];
-            Array.Copy(dl, 0, body, 0, dl.Length);
+            byte[] body = new byte[bech32.Length + dl.Length + 1];
+            Array.Copy(bech32, 0, body, 0, bech32.Length);
+            Array.Copy(dl, 0, body, bech32.Length, dl.Length);
             body[^1] = isSigServer ? (byte)1 : (byte)0;
 
             dl = new byte[0];
             return body;
         }
-        internal static bool MTU_FOUND(Span<byte> body, out ushort? dataLenght, out bool? isSigServer)
+        internal static bool MTU_FOUND(Span<byte> body, out NPub? npub, out ushort? dataLenght, out bool? isSigServer)
         {
-            dataLenght = BitConverter.ToUInt16(body.Slice(0, 2));
-            isSigServer = body.Slice(2, 1)[0] == 1;
+            npub = null;
+            string bech32 = body.Slice(0, 58).ToArray().ToUTF8String();
+            try
+            {
+                npub = string.IsNullOrEmpty(bech32) ? null : NPub.FromBech32($"npub1{bech32}");
+            }
+            catch
+            {
+                npub = null;
+            }
+            dataLenght = BitConverter.ToUInt16(body.Slice(58, 2));
+            isSigServer = body.Slice(60, 1)[0] == 1;
 
             return dataLenght.HasValue;
         }
@@ -74,7 +84,6 @@ namespace RUDP.Utilities
             return requestedNPub is not null;
         }
 
-
         internal static byte[] UNKNOWN_IDENTITY(NPub npub)
         {
             return npub.Bech32.Replace("npub1", "").UTF8AsByteArray();
@@ -93,7 +102,6 @@ namespace RUDP.Utilities
             }
             return requestedNPub is not null;
         }
-
 
         internal static byte[] P2P_CONNECTION_COORDINATION(NPub npub, EndPoint? peerEP1, EndPoint? peerEP2, EndPoint? peerEP3)
         {
@@ -137,7 +145,6 @@ namespace RUDP.Utilities
             return peerNPub is not null;
         }
 
-
         internal static byte[] CONNECTION_POSSIBLE(string nPubBech32)
         {
             return Encoding.UTF8.GetBytes(nPubBech32.Replace("npub1", ""));
@@ -158,85 +165,34 @@ namespace RUDP.Utilities
         }
 
 
-        internal static byte[] DISCONNECTION(int? sentSecret = null, int? receivedSecret = null)
-        {
-            sentSecret = !sentSecret.HasValue ? 0 : sentSecret.Value;
-            receivedSecret = !receivedSecret.HasValue ? 0 : receivedSecret.Value;
-            byte[] sent = BitConverter.GetBytes(sentSecret.Value);
-            byte[] received = BitConverter.GetBytes(receivedSecret.Value);
-            byte[] body = new byte[sent.Length + received.Length];
-            Array.Copy(sent, 0, body, 0, sent.Length);
-            Array.Copy(received, 0, body, sent.Length, received.Length);
-            sent = new byte[0];
-            received = new byte[0];
-            return body;
-        }
-        internal static bool DISCONNECTION(byte[] packet, NSec nsec, NPub? npub, out int? sentSecret, out int? receivedSecret)
-        {
-            sentSecret = null;
-            receivedSecret = null;
-            if (npub is null)
-                return false;
-
-            PacketType type = (PacketType)packet[0];
-            if (type != PacketType.DISCONNECTION)
-                return false;
-
-            Header header = Header.Deserialize(packet);
-            if (header.IV is null)
-                return false;
-
-            byte[] encryptedBody = new Span<byte>(packet).Slice(header.Length).ToArray();
-            Span<byte> body = new Span<byte>(nsec.Decrypt(encryptedBody, header.IV, npub));
-            if (body.Length < 8)
-                return false;
-
-            sentSecret = BitConverter.ToInt32(body.Slice(0, 4));
-            receivedSecret = BitConverter.ToInt32(body.Slice(4, 4));
-            sentSecret = sentSecret.Value == 0 ? null : sentSecret.Value;
-            receivedSecret = receivedSecret.Value == 0 ? null : receivedSecret.Value;
-            return sentSecret.HasValue && sentSecret.Value > 0 || receivedSecret.HasValue && receivedSecret.Value > 0;
-        }
-
-
         internal static byte[] SIGNALING_PROPAGATION(NPub peerNPub, EndPoint peerEP, byte relativeIndex)
         {
-            byte[] pubKey = peerNPub.Bech32.UTF8AsByteArray();
-            byte[] encryptedEP = peerEP.ToIPV4String().PadRight(21, '_').UTF8AsByteArray();
-            byte[] body = new byte[pubKey.Length + encryptedEP.Length + 1];
-            Array.Copy(pubKey, 0, body, 0, pubKey.Length);
-            Array.Copy(encryptedEP, 0, body, pubKey.Length, encryptedEP.Length);
-            pubKey = new byte[0];
-            encryptedEP = new byte[0];
+            byte[] bech32 = peerNPub.Bech32.Replace("npub1", "").UTF8AsByteArray();
+            byte[] ep = peerEP.ToIPV4String().PadRight(21, '_').UTF8AsByteArray();
+            byte[] body = new byte[bech32.Length + ep.Length + 1];
+            Array.Copy(bech32, 0, body, 0, bech32.Length);
+            Array.Copy(ep, 0, body, bech32.Length, ep.Length);
+            bech32 = new byte[0];
+            ep = new byte[0];
             body[body.Length - 1] = relativeIndex;
             return body;
         }
-        internal static bool SIGNALING_PROPAGATION(byte[] packet, NSec nsec, NPub? npub, out NPub? peerNPub, out EndPoint? peerEP, out byte relativeIndex)
+        internal static bool SIGNALING_PROPAGATION(Span<byte> body, out NPub? peerNPub, out EndPoint? peerEP, out byte relativeIndex)
         {
             peerNPub = null;
             peerEP = null;
             relativeIndex = 0;
-            PacketType type = (PacketType)packet[0];
-            if (type != PacketType.SIGNALING_PROPAGATION)
-                return false;
 
-            Header header = Header.Deserialize(packet);
-            if (header.IV is null)
-                return false;
-
-            byte[] encryptedBody = new Span<byte>(packet).Slice(header.Length).ToArray();
-            Span<byte> body = new Span<byte>(nsec.Decrypt(encryptedBody, header.IV, npub));
-
-            string bech32 = body.Slice(0, 63).ToArray().ToUTF8String();
+            string bech32 = body.Slice(0, 58).ToArray().ToUTF8String();
             try
             {
-                peerNPub = string.IsNullOrEmpty(bech32) ? null : NPub.FromBech32(bech32);
+                peerNPub = string.IsNullOrEmpty(bech32) ? null : NPub.FromBech32($"npub1{bech32}");
             }
             catch
             {
                 peerNPub = null;
             }
-            peerEP = body.Slice(63, 21).ToArray().ToUTF8String().Replace("_", "").ToEndPoint();
+            peerEP = body.Slice(58, 21).ToArray().ToUTF8String().Replace("_", "").ToEndPoint();
             relativeIndex = body[^1];
             return peerNPub is not null && peerEP is not null && relativeIndex > 0;
         }

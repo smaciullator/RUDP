@@ -1,10 +1,21 @@
 ﻿using RUDP.Cryptography;
+using System.Security.Cryptography;
 using System.Text;
 
 namespace RUDP.Extensions
 {
     internal static class ByteArrayExtensions
     {
+        /// <summary>
+        /// Return the SHA256 hashed representation of the given string as a byte array
+        /// </summary>
+        /// <param name="data"></param>
+        /// <returns></returns>
+        internal static byte[] GetSha256(this byte[] bytes)
+        {
+            byte[] sha256 = SHA256.HashData(bytes);
+            return sha256;
+        }
         /// <summary>
         /// Return an UTF-8 encoded string from the given byte array
         /// </summary>

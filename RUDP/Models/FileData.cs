@@ -5,15 +5,11 @@ namespace RUDP.Models
     internal class FileData : IDisposable
     {
         internal string FileFullPath { get; set; }
-        internal string FileName { get; set; }
         internal long ChunksNumber { get; set; }
         internal long CurrentChunk { get; set; }
         internal FileStream Stream { get; set; }
-        internal ConcurrentDictionary<uint, byte[]> EarlyChunks { get; set; }
-        /// <summary>
-        /// Flag usato per indicare se stiamo recuperando i chunks arrivati in seguito e salvati temporaneamente nella proprietà EarlyChunks
-        /// </summary>
-        internal bool Recovering { get; set; }
+        internal ConcurrentDictionary<uint, byte[]> ChunksBuffer { get; set; }
+        internal bool AllChunksReceived => ChunksNumber == CurrentChunk + 1;
 
 
         internal FileData() { }
@@ -22,14 +18,13 @@ namespace RUDP.Models
             FileFullPath = fileFullPath;
             ChunksNumber = chunksNumber;
         }
-        internal FileData(string fileName, long chunksNumber, FileStream stream)
+        internal FileData(string fileFullPath, long chunksNumber, FileStream stream)
         {
-            FileName = fileName;
+            FileFullPath = fileFullPath;
             ChunksNumber = chunksNumber;
             CurrentChunk = 0;
             Stream = stream;
-            EarlyChunks = new();
-            Recovering = false;
+            ChunksBuffer = new();
         }
 
 
@@ -37,8 +32,8 @@ namespace RUDP.Models
         {
             if (Stream is not null)
                 Stream.Dispose();
-            if (EarlyChunks is not null)
-                EarlyChunks.Clear();
+            if (ChunksBuffer is not null)
+                ChunksBuffer.Clear();
         }
     }
 }

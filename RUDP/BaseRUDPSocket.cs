@@ -8,7 +8,6 @@ using System.Data;
 using System.Diagnostics;
 using System.Net;
 using System.Text;
-using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace RUDP
 {
@@ -42,9 +41,13 @@ namespace RUDP
         public event EventHandler<EndPoint, string, byte[], long> OnData;
         public event EventHandler<EndPoint, string, byte[], long> OnStream;
         /// <summary>
+        /// Triggered when a file sending has succesfully ended
+        /// </summary>
+        public event EventHandler<EndPoint, string> OnFileSent;
+        /// <summary>
         /// Triggered when a file reception has succesfully ended
         /// </summary>
-        public event EventHandler<EndPoint, string, string> OnFile;
+        public event EventHandler<EndPoint, string, string> OnFileReceived;
         /// <summary>
         /// Return each second some informations about the total upload/download rates, details for each single connected endpoint
         /// and a value indicating the fill percentage of the send buffer.
@@ -71,8 +74,10 @@ namespace RUDP
 
 
         private string _defaultTempFileFolder { get; set; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RUDPSocket_TEMP");
-        private ConcurrentDictionary<uint, FileData> _sendingFiles { get; set; } = new();
+        private ConcurrentDictionary<uint, uint> _receivingChunks { get; set; } = new();
+        private ConcurrentDictionary<uint, string> _sendingFiles { get; set; } = new();
         private ConcurrentDictionary<uint, FileData> _receivingFiles { get; set; } = new();
+        private const string _encryptedFileTag = "_ENCRYPTED";
 
 
         public BaseRUDPSocket(bool sigServer, int customPort = 0, string? bech32NSec = null)
@@ -236,34 +241,6 @@ namespace RUDP
 
 
         /// <summary>
-        /// Send some data to the specified endpoint.
-        /// This packet could eventually be splitted into multiple chunks depending on its size and current MTU size with the endpoint.
-        /// Also, this specific packet will trigger a confirmation packet (ACK) sent by the recipient when received.
-        /// </summary>
-        /// <param name="sendTo"></param>
-        /// <param name="rawData"></param>
-        /// <returns></returns>
-        public bool SendData(EndPoint sendTo, byte[] rawData)
-        {
-            if (!_epsInfo.ContainsKey(sendTo))
-                return false;
-            return Send(sendTo, PacketUtilities.DATA(Identity, _epsInfo[sendTo].GetNextSendNumeration(), 0, rawData, GetEPNPub(sendTo)), true);
-        }
-        /// <summary>
-        /// Send a stream to the specified endpoint.
-        /// This packet could eventually be splitted into multiple chunks depending on its size and current MTU size with the endpoint.
-        /// This packet will never be acknowledged, so if it gets lost it will not be sent again.
-        /// </summary>
-        /// <param name="sendTo"></param>
-        /// <param name="rawData"></param>
-        /// <returns></returns>
-        public bool SendStream(EndPoint sendTo, byte[] rawData)
-        {
-            if (!_epsInfo.ContainsKey(sendTo))
-                return false;
-            return Send(sendTo, PacketUtilities.STREAM(Identity, rawData, GetEPNPub(sendTo)));
-        }
-        /// <summary>
         /// Send an RTTA Packet and store its timestamp for subsequent channel latency statistics
         /// </summary>
         /// <param name="sendTo"></param>
@@ -291,6 +268,59 @@ namespace RUDP
                 return Send(sendTo, PacketUtilities.RTTB(Identity, num.Value));
             return false;
         }
+        /// <summary>
+        /// Send the ACKL packet to the specified endpoint.
+        /// Also takes the original full packet (header + data) received to parse the header
+        /// </summary>
+        /// <param name="sendTo"></param>
+        /// <param name="pkt"></param>
+        /// <returns></returns>
+        private bool SendAcknowledge(EndPoint sendTo, byte[] pkt)
+        {
+            if (!_epsInfo.ContainsKey(sendTo))
+                return false;
+            Header header = Header.Deserialize(pkt);
+            return Send(sendTo, PacketUtilities.ACKNOWLEDGEMENT(Identity, header.PacketIdentifier ?? 0, header.ChunkNumber));
+        }
+
+
+        /// <summary>
+        /// Send an MTUD (MTU Discovery) packet to begin the channel size discovery with a peer
+        /// </summary>
+        /// <param name="sendTo"></param>
+        /// <param name="dataSize"></param>
+        /// <param name="relativeIndex"></param>
+        /// <returns></returns>
+        private bool SendMTUDiscovery(EndPoint sendTo, int dataSize, byte relativeIndex = 0)
+        {
+            if (!_epsInfo.ContainsKey(sendTo))
+                return false;
+            return Send(sendTo, PacketUtilities.MTU_DISCOVERY(Identity, _epsInfo[sendTo].GetNextSendNumeration(), dataSize, relativeIndex), true);
+        }
+        /// <summary>
+        /// Send an MTUF (MTU Found) packet after an MTUD is received, to end the channel size discovery and set the size on both peers.
+        /// </summary>
+        /// <param name="sendTo"></param>
+        /// <returns></returns>
+        private bool SendMTUFound(EndPoint sendTo, ushort dataLenght)
+        {
+            if (!_epsInfo.ContainsKey(sendTo))
+                return false;
+            return Send(sendTo, PacketUtilities.MTU_FOUND(Identity, _epsInfo[sendTo].GetNextSendNumeration(), dataLenght, SigServer), true);
+        }
+        /// <summary>
+        /// Try to send a DISCONNECTION packet to do a collaborative disconnection with the other peer
+        /// </summary>
+        /// <param name="sendTo"></param>
+        /// <returns></returns>
+        private bool SendDisconnection(EndPoint sendTo)
+        {
+            if (!_epsInfo.ContainsKey(sendTo) || !_epsInfo[sendTo].IsConnected)
+                return false;
+            return Send(sendTo, PacketUtilities.DISCONNECTION(Identity, _epsInfo[sendTo].GetNextSendNumeration()), true);
+        }
+
+
         /// <summary>
         /// Send a P2PR (Peer To Peer Coordination Request) to the specified endpoint.
         /// NOTE: the endpoint has to be an already connected Signaling Server
@@ -365,55 +395,8 @@ namespace RUDP
                 return false;
             }
         }
-        /// <summary>
-        /// Send the ACKL packet to the specified endpoint.
-        /// Also takes the original full packet (header + data) received to parse the header
-        /// </summary>
-        /// <param name="sendTo"></param>
-        /// <param name="pkt"></param>
-        /// <returns></returns>
-        private bool SendAcknowledge(EndPoint sendTo, byte[] pkt)
-        {
-            if (!_epsInfo.ContainsKey(sendTo))
-                return false;
-            Header header = Header.Deserialize(pkt);
-            return Send(sendTo, PacketUtilities.ACKNOWLEDGEMENT(Identity, header.PacketIdentifier ?? 0, header.ChunkNumber));
-        }
-        /// <summary>
-        /// Send an MTUD (MTU Discovery) packet to begin the channel size discovery with a peer
-        /// </summary>
-        /// <param name="sendTo"></param>
-        /// <param name="dataSize"></param>
-        /// <param name="relativeIndex"></param>
-        /// <returns></returns>
-        private bool SendMTUDiscovery(EndPoint sendTo, int dataSize, byte relativeIndex = 0)
-        {
-            if (!_epsInfo.ContainsKey(sendTo))
-                return false;
-            return Send(sendTo, PacketUtilities.MTU_DISCOVERY(Identity, _epsInfo[sendTo].GetNextSendNumeration(), dataSize, relativeIndex), true);
-        }
-        /// <summary>
-        /// Send an MTUF (MTU Found) packet after an MTUD is received, to end the channel size discovery and set the size on both peers.
-        /// </summary>
-        /// <param name="sendTo"></param>
-        /// <returns></returns>
-        private bool SendMTUFound(EndPoint sendTo, ushort dataLenght)
-        {
-            if (!_epsInfo.ContainsKey(sendTo))
-                return false;
-            return Send(sendTo, PacketUtilities.MTU_FOUND(Identity, _epsInfo[sendTo].GetNextSendNumeration(), dataLenght, SigServer), true);
-        }
-        /// <summary>
-        /// Try to send a DISCONNECTION packet to do a collaborative disconnection with the other peer
-        /// </summary>
-        /// <param name="sendTo"></param>
-        /// <returns></returns>
-        private bool SendDisconnection(EndPoint sendTo)
-        {
-            if (!_epsInfo.ContainsKey(sendTo) || !_epsInfo[sendTo].IsConnected)
-                return false;
-            return Send(sendTo, PacketUtilities.DISCONNECTION(Identity, _epsInfo[sendTo].GetNextSendNumeration()), true);
-        }
+
+
         /// <summary>
         /// Try to send a propagation packet from this Signaling Server to every other known and connected Signaling Servers
         /// </summary>
@@ -436,10 +419,37 @@ namespace RUDP
         {
             if (!SigServer || !_epsInfo.ContainsKey(sendTo) || !_epsInfo[sendTo].IsConnected || !_epsInfo[sendTo].IsSigServer)
                 return false;
-            byte[]? data = Body.TryEncryptData(Identity, GetEPNPub(sendTo), Body.SIGNALING_PROPAGATION(GetEPNPub(peerEP), peerEP, relativeIndex), out byte[] ivBytes);
-            if (data is null)
+            return Send(sendTo, PacketUtilities.SIGNALING_PROPAGATION(Identity, _epsInfo[sendTo].GetNextSendNumeration(), GetEPNPub(peerEP), peerEP, relativeIndex, GetEPNPub(sendTo)), true);
+        }
+
+
+        /// <summary>
+        /// Send some data to the specified endpoint.
+        /// This packet could eventually be splitted into multiple chunks depending on its size and current MTU size with the endpoint.
+        /// Also, this specific packet will trigger a confirmation packet (ACK) sent by the recipient when received.
+        /// </summary>
+        /// <param name="sendTo"></param>
+        /// <param name="rawData"></param>
+        /// <returns></returns>
+        public bool SendData(EndPoint sendTo, byte[] rawData)
+        {
+            if (!_epsInfo.ContainsKey(sendTo))
                 return false;
-            return Send(sendTo, Header.SIGNALING_PROPAGATION(_epsInfo[sendTo].GetNextSendNumeration(), ivBytes), data, true);
+            return Send(sendTo, PacketUtilities.DATA(Identity, _epsInfo[sendTo].GetNextSendNumeration(), 0, rawData, GetEPNPub(sendTo)), true);
+        }
+        /// <summary>
+        /// Send a stream to the specified endpoint.
+        /// This packet could eventually be splitted into multiple chunks depending on its size and current MTU size with the endpoint.
+        /// This packet will never be acknowledged, so if it gets lost it will not be sent again.
+        /// </summary>
+        /// <param name="sendTo"></param>
+        /// <param name="rawData"></param>
+        /// <returns></returns>
+        public bool SendStream(EndPoint sendTo, byte[] rawData)
+        {
+            if (!_epsInfo.ContainsKey(sendTo))
+                return false;
+            return Send(sendTo, PacketUtilities.STREAM(Identity, rawData, GetEPNPub(sendTo)));
         }
 
         #region Files
@@ -448,154 +458,28 @@ namespace RUDP
             using (FileStream file = File.Open(fileFullPath, FileMode.Open, FileAccess.Read, FileShare.Read))
                 return SendFilePresentation(sendTo, fileFullPath, file.Length);
         }
-
         private bool SendFilePresentation(EndPoint sendTo, string fileFullPath, long fileSize)
         {
             if (!_epsInfo.ContainsKey(sendTo))
                 return false;
 
-            long chunksNumber = fileSize / GetEPMTUSize(sendTo);
-            if (fileSize % GetEPMTUSize(sendTo) > 0)
-                chunksNumber++;
-            byte[] cn = BitConverter.GetBytes(chunksNumber);
-            byte[] fileName = Encoding.UTF8.GetBytes(Path.GetFileName(fileFullPath));
-            byte[] body = new byte[cn.Length + fileName.Length];
-            Array.Copy(cn, 0, body, 0, cn.Length);
-            Array.Copy(fileName, 0, body, cn.Length, fileName.Length);
+            byte[] body = Path.GetFileName(fileFullPath).UTF8AsByteArray();
 
             uint uniqueIdentifier = _epsInfo[sendTo].GetNextSendNumeration();
             _sendingFiles.AddOrUpdate(
                 uniqueIdentifier,
                 // NOTA: qui inserisco la FULL PATH invece del solo file name per poter successivamente inviare il file
-                addValue: new(fileFullPath, chunksNumber),
+                addValue: fileFullPath,
                 updateValueFactory: (identifier, value) => value
             );
             return Send(sendTo, PacketUtilities.FILE_PRESENTATION(Identity, uniqueIdentifier, 0, body, GetEPNPub(sendTo)), true);
         }
-        private bool SendFile(EndPoint sendTo, byte[] chunk)
+        private bool SendFileContent(EndPoint sendTo, uint packetIdentifier, uint chunkNumber, byte[] chunk)
         {
             if (!_epsInfo.ContainsKey(sendTo))
                 return false;
 
-            return Send(sendTo, PacketUtilities.FILE(Identity, _epsInfo[sendTo].GetNextSendNumeration(), 0, chunk, GetEPNPub(sendTo)), true);
-        }
-
-        private void ManageFilePresentation(uint packetIdentifier, byte[] decryptedData)
-        {
-            // Prendo il nome file
-            byte[] cn = new byte[8];
-            Array.Copy(decryptedData, 0, cn, 0, 8);
-            long chunksNumber = BitConverter.ToInt64(cn);
-            byte[] fn = new byte[decryptedData.Length - 8];
-            string fileName = Encoding.UTF8.GetString(fn);
-
-            // Creo il file temporaneo
-            string fileFullPath = Path.Combine(_defaultTempFileFolder, fileName);
-            if (!Directory.Exists(_defaultTempFileFolder))
-                Directory.CreateDirectory(_defaultTempFileFolder);
-            FileStream fs = File.Create(fileFullPath);
-
-            // Aggiungo il riferimento alla path del file temporaneo
-            _receivingFiles.AddOrUpdate(
-                packetIdentifier,
-                addValue: new(fileFullPath, chunksNumber, fs),
-                updateValueFactory: (identifier, value) => value = new(fileFullPath, chunksNumber, fs)
-            );
-        }
-        private void ManageFilePresentationConfirm(EndPoint receivedFrom, uint packetIdentifier)
-        {
-            if (!_sendingFiles.ContainsKey(packetIdentifier))
-                return;
-            Task.Run(() =>
-            {
-                using FileStream file = File.Open(_sendingFiles[packetIdentifier].FileFullPath, FileMode.Open, FileAccess.Read, FileShare.Read);
-                int readBytes = 0,
-                    position = 0;
-                byte[] buffer = new byte[GetEPMTUSize(receivedFrom)];
-                file.Position = position;
-                while ((readBytes = file.Read(buffer, 0, buffer.Length)) > 0)
-                {
-                    position += readBytes;
-                    // Devo essere sicuro che l'ultimo file chunk arrivi, altrimenti se venisse perso non potrei mai completare l'invio file
-                    bool endOfFile = file.Position + readBytes == file.Length;
-
-                    if (readBytes < buffer.Length)
-                        SendFile(receivedFrom, new Span<byte>(buffer).Slice(0, readBytes).ToArray());
-                    else
-                        SendFile(receivedFrom, buffer);
-                    file.Position = position;
-                }
-                _sendingFiles.TryRemove(packetIdentifier, out FileData? fd);
-                if (fd is not null)
-                    fd.Dispose();
-
-                file.Dispose();
-            });
-        }
-        private void ManageFileChunk(EndPoint receivedFrom, uint packetIdentifier, uint chunkNumber, byte[] data)
-        {
-            if (!_receivingFiles.ContainsKey(packetIdentifier))
-                return;
-
-            string bech32 = "";
-            if (_epsInfo.ContainsKey(receivedFrom))
-                bech32 = _epsInfo[receivedFrom].NPubBech32 ?? "";
-
-            // Non-chunked file
-            if (_receivingFiles[packetIdentifier].ChunksNumber == 0 && chunkNumber == 0)
-            {
-                _receivingFiles[packetIdentifier].Stream.Write(data, 0, data.Length);
-
-                OnFile?.Invoke(receivedFrom, bech32, _receivingFiles[packetIdentifier].Stream.Name);
-            }
-            // Next adiacent chunk arrived
-            else if (_receivingFiles[packetIdentifier].CurrentChunk + 1 == chunkNumber)
-            {
-                _receivingFiles[packetIdentifier].CurrentChunk++;
-                _receivingFiles[packetIdentifier].Stream.Write(data, 0, data.Length);
-                // If file ended
-                if (_receivingFiles[packetIdentifier].ChunksNumber == chunkNumber)
-                {
-                    OnFile?.Invoke(receivedFrom, bech32, _receivingFiles[packetIdentifier].Stream.Name);
-                    _receivingFiles.TryRemove(packetIdentifier, out FileData? fd);
-                    if (fd is not null)
-                        fd.Dispose();
-                }
-            }
-            // Subsequent BUT non-adiacent packet arrived
-            else
-            {
-                _receivingFiles[packetIdentifier].EarlyChunks.TryAdd(chunkNumber, data);
-
-                if (_receivingFiles[packetIdentifier].Recovering)
-                    return;
-                _receivingFiles[packetIdentifier].Recovering = true;
-                Task.Run(() =>
-                {
-                    while (_receivingFiles.ContainsKey(packetIdentifier) && _receivingFiles[packetIdentifier] is not null)
-                        try
-                        {
-                            foreach (KeyValuePair<uint, byte[]> chunk in _receivingFiles[packetIdentifier].EarlyChunks.OrderBy(x => x.Key))
-                                if (_receivingFiles[packetIdentifier].ChunksNumber + 1 == chunk.Key)
-                                {
-                                    _receivingFiles[packetIdentifier].CurrentChunk++;
-                                    _receivingFiles[packetIdentifier].Stream.Write(data, 0, data.Length);
-                                    _receivingFiles[packetIdentifier].EarlyChunks.TryRemove(chunk.Key, out _);
-                                    // If file ended
-                                    if (_receivingFiles[packetIdentifier].ChunksNumber == chunk.Key)
-                                    {
-                                        OnFile?.Invoke(receivedFrom, bech32, _receivingFiles[packetIdentifier].Stream.Name);
-                                        _receivingFiles.TryRemove(packetIdentifier, out FileData? fd);
-                                        if (fd is not null)
-                                            fd.Dispose();
-                                    }
-                                }
-                            ThreadUtilities.PauseThread(100);
-                        }
-                        catch (Exception) { }
-                    _receivingFiles[packetIdentifier].Recovering = false;
-                });
-            }
+            return Send(sendTo, PacketUtilities.FILE_CONTENT(Identity, packetIdentifier, chunkNumber, chunk, GetEPNPub(sendTo)), true);
         }
         #endregion
 
@@ -605,77 +489,83 @@ namespace RUDP
             if (socket is null || _recentlyDisconnectedEndpoints.ContainsKey(sendTo))
                 return false;
 
-            List<byte[]>? chunks = GetChunks(sendTo, pkt.header, pkt.data);
-            if (chunks is null)
-                return false;
-            foreach (byte[] chunk in chunks)
-            {
-                socket.Send(sendTo, chunk);
-                if (requireAck)
-                    _epsInfo.AddOrUpdate(sendTo, addValue: new(sendTo), updateValueFactory: (endpoint, value) => value.AddUnackPacket(chunk));
-            }
-            chunks.Clear();
-            return true;
-        }
-        private List<byte[]>? GetChunks(EndPoint sendTo, Header header, byte[]? data = null)
-        {
             // If the current MTU Size is too small we can't procede
             int maxPktSize = GetEPMTUSize(sendTo);
             if (maxPktSize < Header._minSize)
-                return null;
+                return false;
 
-            List<byte[]> chunks = new();
-            int dataLength = data is null ? 0 : data.Length;
-
-            // If this packet doesn't exceed the current MTU Size for the endpoint
-            if (header.Length + dataLength <= maxPktSize)
-                chunks.Add(PacketUtilities.CreatePacket(header, data));
-            // If the packet have to be divided in chunks
+            if (pkt.header.Type == PacketType.FILE_CONTENT)
+            {
+                byte[] data = PacketUtilities.CreatePacket(pkt.header, pkt.data);
+                bool sent = socket.Send(sendTo, data);
+                if (requireAck)
+                    _epsInfo.AddOrUpdate(sendTo, addValue: new(sendTo), updateValueFactory: (endpoint, value) => value.AddUnackPacket(data));
+                return sent;
+            }
             else
             {
-                // If the MTU Size is smaller than {Header._minSize} bytes the protocol doesn't work
-                if (data is null)
-                    return null;
-                // Only DATA and STR packets can be chunked
-                if (header.Type != PacketType.DATA && header.Type != PacketType.STREAM)
+                List<byte[]>? chunks = GetChunks(sendTo, pkt, maxPktSize);
+                if (chunks is null)
+                    return false;
+                foreach (byte[] chunk in chunks)
+                {
+                    socket.Send(sendTo, chunk);
+                    if (requireAck)
+                        _epsInfo.AddOrUpdate(sendTo, addValue: new(sendTo), updateValueFactory: (endpoint, value) => value.AddUnackPacket(chunk));
+                }
+                chunks.Clear();
+                return true;
+            }
+        }
+        private List<byte[]>? GetChunks(EndPoint sendTo, (Header header, byte[]? data) pkt, int maxPktSize)
+        {
+            List<byte[]> chunks = new();
+            int dataLength = pkt.data is null ? 0 : pkt.data.Length;
+
+            // If this packet doesn't exceed the current MTU Size for the endpoint
+            if (pkt.header.Length + dataLength <= maxPktSize)
+                chunks.Add(PacketUtilities.CreatePacket(pkt.header, pkt.data));
+            // If the packet must be divided in chunks
+            else
+            {
+                // If we are exceeding the max packet size only with header wen cannot send anything
+                if (dataLength == 0)
                     return null;
 
-                int maxDataSize = maxPktSize - (header.Length - (header.IV is null ? 0 : header.IV.Length)); // the IV bytes are sent only on first chunk
-                uint chunksNumber = Convert.ToUInt32(data.Length / maxDataSize);
-                if (data.Length % maxDataSize > 0)
+                // Only DATA and FILE_PRESENTATION packets can be chunked
+                if (pkt.header.Type != PacketType.DATA && pkt.header.Type != PacketType.FILE_PRESENTATION)
+                    return null;
+
+                NPub? epNPub = GetEPNPub(sendTo);
+                if (epNPub is null)
+                    return null;
+
+                int maxDataSize = maxPktSize - pkt.header.Length;
+                uint chunksNumber = Convert.ToUInt32(dataLength / maxDataSize);
+                if (dataLength % maxDataSize > 0)
                     chunksNumber += 1;
 
                 int offset = 0,
                     chunkSize;
                 byte[] chunkData;
 
+                Send(sendTo, PacketUtilities.CHUNKS_PRESENTATION(Identity, pkt.header.PacketIdentifier.Value, chunksNumber, epNPub), true);
 
-                // In case we have a DATA packet, only the first packet will send the Aes IV
-                if (header.Type == PacketType.DATA)
+                // All chunks start from number 0
+                for (uint i = 0; i < chunksNumber; i++)
                 {
-                    header.ChunkNumber = 1; // The packet sharing the Aes IV always need ChunkNumber = 1 (0 is reserved for non-chunked packets)
-                    chunks.Add(PacketUtilities.CreatePacket(header, BitConverter.GetBytes(chunksNumber))); // We also send the total chunks expected
-                    //header.IV = null; // Now we can safely remove IV to prevent it from appearing on the next chunks
-                }
-
-
-                // All chunks start from number 1 (0 is reserved for IV sharing on DATA packets)
-                for (uint i = 1; i <= chunksNumber; i++)
-                {
-                    chunkSize = Math.Min(data.Length - offset, maxDataSize);
+                    chunkSize = Math.Min(dataLength - offset, maxDataSize);
                     chunkData = new byte[chunkSize];
-                    for (int j = 0; j < chunkData.Length && (offset + j) < data.Length; j++)
-                        chunkData[j] = data[offset + j];
+                    for (int j = 0; j < chunkData.Length && (offset + j) < dataLength; j++)
+                        chunkData[j] = pkt.data[offset + j];
 
-                    // STR packets doesn't need a unique chunk identifier, so we can easily split each chunk
-                    if (header.Type == PacketType.STREAM)
-                        chunks.Add(PacketUtilities.CreatePacket(header, chunkData));
-                    // But DATA packets need a unique numeration for each chunk
-                    else if (header.Type == PacketType.DATA)
-                    {
-                        header.ChunkNumber = i + 1; // +1 because 1 is reserved for IV sharing chunk, and we also count in base 1
-                        chunks.Add(PacketUtilities.CreatePacket(header, chunkData));
-                    }
+                    (Header header, byte[]? data) chunkedPacket = new(new(), null);
+                    if (pkt.header.Type == PacketType.DATA)
+                        chunkedPacket = PacketUtilities.DATA(Identity, pkt.header.PacketIdentifier.Value, i, chunkData, epNPub);
+                    if (pkt.header.Type == PacketType.FILE_PRESENTATION)
+                        chunkedPacket = PacketUtilities.FILE_PRESENTATION(Identity, pkt.header.PacketIdentifier.Value, i, chunkData, epNPub);
+
+                    chunks.Add(PacketUtilities.CreatePacket(chunkedPacket.header, chunkedPacket.data));
                     offset += chunkSize;
                 }
             }
@@ -700,6 +590,11 @@ namespace RUDP
         {
             _epsInfo.AddOrUpdate(ep, addValue: new(ep, mtuSize), updateValueFactory: (endpoint, value) => value.SetMTUSize(mtuSize));
         }
+        private void SetEPTrusted(EndPoint ep, bool trusted)
+        {
+            if (_epsInfo.ContainsKey(ep))
+                _epsInfo[ep].SetTrusted(trusted);
+        }
 
 
         private void Socket_OnReceive(EndPoint receivedFrom, byte[] packet, long timestamp)
@@ -718,49 +613,73 @@ namespace RUDP
 
             switch (header.Type)
             {
-                case PacketType.DATA:
-                case PacketType.FILE_PRESENTATION:
-                case PacketType.FILE:
+                case PacketType.CHUNKS_PRESENTATION:
                     SendAcknowledge(receivedFrom, packet);
 
                     if (SigServer || !header.PacketIdentifier.HasValue || !header.ChunkNumber.HasValue)
                         break;
 
-                    if (senderNPub is null || !PacketUtilities.IsSignatureValid(senderNPub, header, rawBody))
+                    if (senderNPub is null || !PacketUtilities.IsSignatureValid(Identity, senderNPub, header, rawBody))
                     {
-                        _epsInfo[receivedFrom].SetTrusted(false);
+                        SetEPTrusted(receivedFrom, false);
                         break;
                     }
 
-                    // If it's not a chunked packet
-                    if (header.ChunkNumber == 0)
+                    _receivingChunks.TryAdd(header.PacketIdentifier.Value, header.ChunkNumber.Value);
+                    break;
+                case PacketType.DATA:
+                    SendAcknowledge(receivedFrom, packet);
+
+                    if (SigServer || !header.PacketIdentifier.HasValue || !header.ChunkNumber.HasValue)
+                        break;
+
+                    if (senderNPub is null || !PacketUtilities.IsSignatureValid(Identity, senderNPub, header, rawBody))
                     {
-                        byte[] decryptedData = PacketUtilities.DecryptMessage(Body.ExtractFromPacket(packet), Identity.NSec, senderNPub);
-                        if (header.Type == PacketType.DATA)
-                            OnData?.Invoke(receivedFrom, bech32, decryptedData, timestamp);
-                        else if (header.Type == PacketType.FILE_PRESENTATION)
-                            ManageFilePresentation(header.PacketIdentifier.Value, decryptedData);
-                        else if (header.Type == PacketType.FILE)
-                            ManageFileChunk(receivedFrom, header.PacketIdentifier.Value, header.ChunkNumber.HasValue ? header.ChunkNumber.Value : 0, decryptedData);
+                        SetEPTrusted(receivedFrom, false);
+                        break;
                     }
-                    // If it's a chunk
-                    else if (ManageChunks(receivedFrom, header, packet, out byte[] fullDecryptedData))
+
+                    if (!ManageDataChunks(receivedFrom, header, packet, out byte[] fullData))
+                        break;
+
+                    OnData?.Invoke(receivedFrom, bech32, PacketUtilities.DecryptMessage(fullData, Identity.NSec, senderNPub), timestamp);
+                    break;
+                case PacketType.FILE_PRESENTATION:
+                    SendAcknowledge(receivedFrom, packet);
+
+                    if (SigServer || !header.PacketIdentifier.HasValue || !header.ChunkNumber.HasValue)
+                        break;
+
+                    if (senderNPub is null || !PacketUtilities.IsSignatureValid(Identity, senderNPub, header, rawBody))
                     {
-                        if (header.Type == PacketType.DATA)
-                            OnData?.Invoke(receivedFrom, bech32, fullDecryptedData, timestamp);
-                        else if (header.Type == PacketType.FILE_PRESENTATION)
-                            ManageFilePresentation(header.PacketIdentifier.Value, fullDecryptedData);
-                        else if (header.Type == PacketType.FILE)
-                            ManageFileChunk(receivedFrom, header.PacketIdentifier.Value, header.ChunkNumber.HasValue ? header.ChunkNumber.Value : 0, fullDecryptedData);
+                        SetEPTrusted(receivedFrom, false);
+                        break;
                     }
+
+                    if (!ManageFilePresentationChunks(receivedFrom, header, packet, out byte[] fullFilePresentation))
+                        break;
+
+                    break;
+                case PacketType.FILE_CONTENT:
+                    SendAcknowledge(receivedFrom, packet);
+
+                    if (SigServer || !header.PacketIdentifier.HasValue || !header.ChunkNumber.HasValue)
+                        break;
+
+                    if (senderNPub is null || !PacketUtilities.IsSignatureValid(Identity, senderNPub, header, rawBody))
+                    {
+                        SetEPTrusted(receivedFrom, false);
+                        break;
+                    }
+                    ManageFileContentChunks(receivedFrom, header.PacketIdentifier.Value, header.ChunkNumber.Value, rawBody.ToArray());
                     break;
                 case PacketType.STREAM:
                     if (SigServer)
                         break;
 
-                    if (senderNPub is null || !PacketUtilities.IsSignatureValid(senderNPub, header, rawBody))
+                    if (senderNPub is null || !PacketUtilities.IsSignatureValid(Identity, senderNPub, header, rawBody))
                     {
-                        _epsInfo[receivedFrom].SetTrusted(false);
+                        SetEPTrusted(receivedFrom, false);
                         break;
                     }
 
@@ -769,9 +688,9 @@ namespace RUDP
                     OnStream?.Invoke(receivedFrom, bech32, decryptedStream, timestamp);
                     break;
                 case PacketType.ACKNOWLEDGEMENT:
-                    if (senderNPub is null || !PacketUtilities.IsSignatureValid(senderNPub, header, rawBody))
+                    if (senderNPub is null || !PacketUtilities.IsSignatureValid(Identity, senderNPub, header, rawBody))
                     {
-                        _epsInfo[receivedFrom].SetTrusted(false);
+                        SetEPTrusted(receivedFrom, false);
                         break;
                     }
 
@@ -781,18 +700,15 @@ namespace RUDP
                         if (data.Timestamp.HasValue)
                             socket?.SetEPCongestionWindow(receivedFrom, _epsInfo[receivedFrom].CalculateCongestionWindow((DateTime.Now.Ticks - Convert.ToDouble(data.Timestamp)) / 10000));
 
+                        // FILE_PRESENTATION has been confirmed, so i start sending the file data
                         if (data.PacketType is not null && data.PacketIdentifier.HasValue)
                         {
-                            // FILE_PRESENTATION has been confirmed, so i start sending the file data
                             if (data.PacketType == PacketType.FILE_PRESENTATION)
-                                ManageFilePresentationConfirm(receivedFrom, data.PacketIdentifier.Value);
-                            // A FILE (probably a chunk) has been confirmed, so i check if the file sending has ended
-                            else if (data.PacketType == PacketType.FILE && data.ChunkNumber.HasValue)
+                                ManageFilePresentationAcknowledgment(receivedFrom, data.PacketIdentifier.Value);
+                            else if (data.PacketType == PacketType.FILE_CONTENT)
                             {
-                                if (_sendingFiles.ContainsKey(data.PacketIdentifier.Value)
-                                    && _sendingFiles[data.PacketIdentifier.Value].ChunksNumber == Convert.ToInt64(data.ChunkNumber.Value))
-                                {
-                                }
+                                _sendingFiles.TryRemove(data.PacketIdentifier.Value, out string fileName);
+                                OnFileSent?.Invoke(receivedFrom, fileName);
                             }
                         }
 
@@ -800,18 +716,18 @@ namespace RUDP
                     }
                     break;
                 case PacketType.RTTA:
-                    if (senderNPub is null || !PacketUtilities.IsSignatureValid(senderNPub, header, rawBody))
+                    if (senderNPub is null || !PacketUtilities.IsSignatureValid(Identity, senderNPub, header, rawBody))
                     {
-                        _epsInfo[receivedFrom].SetTrusted(false);
+                        SetEPTrusted(receivedFrom, false);
                         break;
                     }
 
                     SendRTTB(receivedFrom, packet);
                     break;
                 case PacketType.RTTB:
-                    if (senderNPub is null || !PacketUtilities.IsSignatureValid(senderNPub, header, rawBody))
+                    if (senderNPub is null || !PacketUtilities.IsSignatureValid(Identity, senderNPub, header, rawBody))
                     {
-                        _epsInfo[receivedFrom].SetTrusted(false);
+                        SetEPTrusted(receivedFrom, false);
                         break;
                     }
 
@@ -829,9 +745,9 @@ namespace RUDP
                     if (!SigServer)
                         break;
 
-                    if (senderNPub is null || !PacketUtilities.IsSignatureValid(senderNPub, header, rawBody))
+                    if (senderNPub is null || !PacketUtilities.IsSignatureValid(Identity, senderNPub, header, rawBody))
                     {
-                        _epsInfo[receivedFrom].SetTrusted(false);
+                        SetEPTrusted(receivedFrom, false);
                         break;
                     }
 
@@ -843,9 +759,9 @@ namespace RUDP
                 case PacketType.UNKNOWN_IDENTITY:
                     SendAcknowledge(receivedFrom, packet);
 
-                    if (senderNPub is null || !PacketUtilities.IsSignatureValid(senderNPub, header, rawBody))
+                    if (senderNPub is null || !PacketUtilities.IsSignatureValid(Identity, senderNPub, header, rawBody))
                     {
-                        _epsInfo[receivedFrom].SetTrusted(false);
+                        SetEPTrusted(receivedFrom, false);
                         break;
                     }
 
@@ -861,9 +777,9 @@ namespace RUDP
                 case PacketType.P2P_CONNECTION_COORDINATION:
                     SendAcknowledge(receivedFrom, packet);
 
-                    if (senderNPub is null || !PacketUtilities.IsSignatureValid(senderNPub, header, rawBody))
+                    if (senderNPub is null || !PacketUtilities.IsSignatureValid(Identity, senderNPub, header, rawBody))
                     {
-                        _epsInfo[receivedFrom].SetTrusted(false);
+                        SetEPTrusted(receivedFrom, false);
                         break;
                     }
 
@@ -895,7 +811,7 @@ namespace RUDP
                     if (!Body.CONNECTION_POSSIBLE(rawBody, out NPub? npubCNPO) || npubCNPO is null)
                         break;
 
-                    if (!PacketUtilities.IsSignatureValid(npubCNPO, header, rawBody))
+                    if (!PacketUtilities.IsSignatureValid(Identity, npubCNPO, header, rawBody))
                         break;
 
                     // If it's me who started this connection attempt
@@ -910,12 +826,12 @@ namespace RUDP
                     if (packet.Length < Header._minSize)
                         break;
 
-                    if (!Body.MTU_DISCOVERY(rawBody, out NPub? npubMTUD, out byte relativeIndex) || npubMTUD is null)
+                    if (!Body.MTU_DISCOVERY(rawBody, out NPub? npubMTUD, out byte relativeIndexMTU) || npubMTUD is null)
                         break;
 
-                    if (!PacketUtilities.IsSignatureValid(npubMTUD, header, rawBody))
+                    if (!PacketUtilities.IsSignatureValid(Identity, npubMTUD, header, rawBody))
                     {
-                        _epsInfo[receivedFrom].SetTrusted(false);
+                        SetEPTrusted(receivedFrom, false);
                         break;
                     }
 
@@ -923,24 +839,35 @@ namespace RUDP
                     _epsInfo[receivedFrom].SetNPub(npubMTUD);
                     _epsInfo[receivedFrom].SetAmIConnecting(false);
                     if (SigServer)
-                        _epsInfo[receivedFrom].SetRelativeIndex(relativeIndex == 0 ? (byte)1 : relativeIndex);
+                        _epsInfo[receivedFrom].SetRelativeIndex(relativeIndexMTU == 0 ? (byte)1 : relativeIndexMTU);
 
                     SendMTUFound(receivedFrom, Convert.ToUInt16(packet.Length));
                     break;
                 case PacketType.MTU_FOUND:
                     SendAcknowledge(receivedFrom, packet);
 
-                    if (senderNPub is null || !PacketUtilities.IsSignatureValid(senderNPub, header, rawBody))
+                    if (!Body.MTU_FOUND(rawBody, out NPub? npubMTUF, out ushort? dataLength, out bool? isSigServer) || !dataLength.HasValue || !isSigServer.HasValue)
+                        break;
+
+                    if (
+                        (senderNPub is null && !PacketUtilities.IsSignatureValid(Identity, npubMTUF, header, rawBody))
+                        || (senderNPub is not null && !PacketUtilities.IsSignatureValid(Identity, senderNPub, header, rawBody))
+                    )
                     {
-                        _epsInfo[receivedFrom].SetTrusted(false);
+                        SetEPTrusted(receivedFrom, false);
                         break;
                     }
 
-                    if (!Body.MTU_FOUND(rawBody, out ushort? dataLength, out bool? isSigServer) || !dataLength.HasValue || !isSigServer.HasValue)
-                        break;
-
                     SetEPMTUSize(receivedFrom, dataLength.Value);
-                    _epsInfo[receivedFrom].SetTrusted(true);
+                    SetEPTrusted(receivedFrom, true);
+
+                    if (senderNPub is null)
+                    {
+                        _epsInfo[receivedFrom].SetNPub(npubMTUF);
+                        senderNPub = GetEPNPub(receivedFrom);
+                        SendMTUFound(receivedFrom, Convert.ToUInt16(packet.Length));
+                    }
+
                     _epsInfo[receivedFrom].SetConnected(true);
                     _epsInfo[receivedFrom].SetAmIConnecting(null);
                     _epsInfo[receivedFrom].SetIsSigServer(isSigServer.Value);
@@ -950,9 +877,9 @@ namespace RUDP
                 case PacketType.DISCONNECTION:
                     SendAcknowledge(receivedFrom, packet);
 
-                    if (senderNPub is null || !PacketUtilities.IsSignatureValid(senderNPub, header, rawBody))
+                    if (senderNPub is null || !PacketUtilities.IsSignatureValid(Identity, senderNPub, header, rawBody))
                     {
-                        _epsInfo[receivedFrom].SetTrusted(false);
+                        SetEPTrusted(receivedFrom, false);
                         break;
                     }
 
@@ -967,116 +894,203 @@ namespace RUDP
                 case PacketType.SIGNALING_PROPAGATION:
                     SendAcknowledge(receivedFrom, packet);
 
-                    // Decrypt and excract body content
-                    if (!Body.SIGNALING_PROPAGATION(packet, Identity.NSec, GetEPNPub(receivedFrom), out NPub? sigPeerNPub, out EndPoint? sigPeerEP, out byte sigRelativeIndex)
-                        || sigPeerNPub is null || sigPeerEP is null || sigRelativeIndex == 0)
+                    if (senderNPub is null || !PacketUtilities.IsSignatureValid(Identity, senderNPub, header, rawBody))
+                    {
+                        SetEPTrusted(receivedFrom, false);
+                        break;
+                    }
+
+                    byte[] decryptedSigProp = PacketUtilities.DecryptMessage(Body.ExtractFromPacket(packet), Identity.NSec, senderNPub);
+                    if (!Body.SIGNALING_PROPAGATION(decryptedSigProp, out NPub? peerNPubSigProp, out EndPoint? peerEPSigProp, out byte relativeIndexSigProp)
+                        || peerNPubSigProp is null || peerEPSigProp is null || relativeIndexSigProp == 0)
                         break;
 
-                    OnSignalingPropagation?.Invoke(sigPeerEP, sigPeerNPub.Bech32, sigRelativeIndex);
+                    OnSignalingPropagation?.Invoke(peerEPSigProp, peerNPubSigProp.Bech32, relativeIndexSigProp);
                     break;
-            }
-            ;
+            };
         }
-        private bool ManageChunks(EndPoint ep, Header header, byte[] packet, out byte[] fullData)
+        private bool ManageDataChunks(EndPoint ep, Header header, byte[] body, out byte[] fullData)
         {
             fullData = new byte[0];
 
-            // If it's the first packet
-            if (header.ChunkNumber == 1)
+            if (header.ChunkNumber.HasValue)
             {
-                // We extract the expected chunks
-                byte[] body = Body.ExtractFromPacket(packet);
-                uint totalChunks = BitConverter.ToUInt32(body);
-                // We add the UniqueIdentifier to the chunks list
                 _epsInfo[ep]._chunks.AddOrUpdate(
                     header.PacketIdentifier.Value,
                     addValue: new(),
-                    updateValueFactory: (uid, data) => data
+                    updateValueFactory: (packetIdentifier, data) => data
+                );
+                _epsInfo[ep]._chunks[header.PacketIdentifier.Value].AddOrUpdate(
+                    header.ChunkNumber.Value,
+                    addValue: body,
+                    updateValueFactory: (chunkNumber, data) => data
                 );
 
-                // If we have receive a data chunk before this initial packet, we have to replace the "fake" placeholder key with the real ones with IV bytes
-                if (_epsInfo[ep]._chunks[header.PacketIdentifier.Value].ContainsKey(header.PacketIdentifier.Value.ToString()))
+                // If we received all packets
+                if (_receivingChunks.ContainsKey(header.PacketIdentifier.Value) && _receivingChunks[header.PacketIdentifier.Value] == _epsInfo[ep]._chunks[header.PacketIdentifier.Value].Count)
                 {
-                    // We add the IV bytes key, also cloning all of the content
-                    _epsInfo[ep]._chunks[header.PacketIdentifier.Value].AddOrUpdate(
-                        header.IV.ToHexString(),
-                        addValue: _epsInfo[ep]._chunks[header.PacketIdentifier.Value][header.PacketIdentifier.Value.ToString()],
-                        updateValueFactory: (iv, data) => _epsInfo[ep]._chunks[header.PacketIdentifier.Value][header.PacketIdentifier.Value.ToString()]
-                    );
-                    _epsInfo[ep]._chunks[header.PacketIdentifier.Value][header.IV.ToUTF8String()].TotalChunks = totalChunks;
-                    // And then we remove the "fake" placeholder
-                    _epsInfo[ep]._chunks[header.PacketIdentifier.Value].Remove(header.PacketIdentifier.Value.ToString(), out ChunksInfo? datas);
-                    if (datas is not null)
-                        datas.Dispose();
+                    int offset = 0;
+                    foreach (KeyValuePair<uint, byte[]> chunk in _epsInfo[ep]._chunks[header.PacketIdentifier.Value].OrderBy(x => x.Key))
+                    {
+                        Array.Copy(chunk.Value, 0, fullData, offset, chunk.Value.Length);
+                        offset += chunk.Value.Length;
+                    }
+                    _receivingChunks.TryRemove(header.PacketIdentifier.Value, out _);
+                    return true;
                 }
-                // If this initial packet is the first received, we simply add the key
-                else
-                    _epsInfo[ep]._chunks[header.PacketIdentifier.Value].AddOrUpdate(
-                        header.IV.ToHexString(),
-                        addValue: new(totalChunks),
-                        updateValueFactory: (iv, data) => data
-                    );
             }
-            // If it's a data chunk
             else
             {
-                // We try to add the UniqueIdentifier to the chunks list in case this chunk has been received before the initial packet
-                _epsInfo[ep]._chunks.AddOrUpdate(
-                    header.PacketIdentifier.Value,
-                    addValue: new(),
-                    updateValueFactory: (uid, data) => data
-                );
-
-                // If in fact we don't have yet received the initial packet we initialize with a "fake" key with PacketIdentifier as a placeholder
-                if (_epsInfo[ep]._chunks[header.PacketIdentifier.Value].Count == 0)
-                    // Then we also add the IV as the key of the dictionary holding all chunks
-                    _epsInfo[ep]._chunks[header.PacketIdentifier.Value].AddOrUpdate(
-                        header.PacketIdentifier.Value.ToString(),
-                        addValue: new(0),
-                        updateValueFactory: (iv, data) => data
-                    );
-
-                // In every case we stash the chunk
-                _epsInfo[ep]._chunks[header.PacketIdentifier.Value].ElementAt(0).Value.Chunks.Add(new ChunkData(header, packet));
-            }
-
-
-            // If we received all packets
-            // NOTE: this must be checked for every packets (also the initial packet) because on UDP order is not guaranteed
-            KeyValuePair<string, ChunksInfo> item = _epsInfo[ep]._chunks[header.PacketIdentifier.Value].ElementAt(0);
-            if (Convert.ToUInt32(item.Value.Chunks.Count) == item.Value.TotalChunks)
-            {
-                ChunkData? min = item.Value.Chunks.MinBy(x => x.Chunk.Length);
-                if (min is null)
-                    return false;
-                ChunkData? max = item.Value.Chunks.MaxBy(x => x.Chunk.Length);
-                if (max is null)
-                    return false;
-                int shortestChunk = min.Chunk.Length;
-                int largestChunk = max.Chunk.Length;
-                long encryptedBodyLength = ((item.Value.TotalChunks - 1) * largestChunk) + shortestChunk;
-                byte[] encryptedBody = new byte[encryptedBodyLength];
-                long offset = 0;
-                foreach (ChunkData? chk in item.Value.Chunks.OrderBy(x => x.ChunkNumber))
-                {
-                    Array.Copy(chk.Chunk, 0, encryptedBody, offset, chk.Chunk.Length);
-                    offset += chk.Chunk.Length;
-                }
-
-                byte[] IV = item.Key.HexToByteArray();
-
-                item.Value.Dispose();
-                _epsInfo[ep]._chunks[header.PacketIdentifier.Value].Remove(item.Key, out _);
-                _epsInfo[ep]._chunks[header.PacketIdentifier.Value].Clear();
-                _epsInfo[ep]._chunks.Remove(header.PacketIdentifier.Value, out _);
-
-                fullData = PacketUtilities.DecryptMessage(encryptedBody, Identity.NSec, GetEPNPub(ep));
-                fullData = Identity.NSec.Decrypt(encryptedBody, IV, GetEPNPub(ep));
+                fullData = body;
                 return true;
             }
 
             return false;
         }
+        private void ManageFilePresentationAcknowledgment(EndPoint receivedFrom, uint packetIdentifier)
+        {
+            if (!_sendingFiles.ContainsKey(packetIdentifier))
+                return;
+            Task.Run(() =>
+            {
+                using FileStream file = File.Open(_sendingFiles[packetIdentifier], FileMode.Open, FileAccess.Read, FileShare.Read);
+                int readBytes = 0;
+                uint chunkNumber = 0;
+                file.Position = 0;
+
+                int chunkContentSize = GetEPMTUSize(receivedFrom) - Header._minFileContentSize;
+                if (chunkContentSize <= 0)
+                {
+                    file.Dispose();
+                    return;
+                }
+
+                byte[] buffer = new byte[chunkContentSize];
+                while ((readBytes = file.Read(buffer, 0, buffer.Length)) > 0)
+                {
+                    SendFileContent(receivedFrom, _epsInfo[receivedFrom].GetNextSendNumeration(), chunkNumber++, new Span<byte>(buffer).Slice(0, readBytes).ToArray());
+                    file.Position += readBytes;
+                }
+
+                file.Dispose();
+            });
+        }
+        private bool ManageFilePresentationChunks(EndPoint ep, Header header, byte[] body, out byte[] decryptedFullData)
+        {
+            decryptedFullData = new byte[0];
+
+            if (header.ChunkNumber.HasValue)
+            {
+                _epsInfo[ep]._chunks.AddOrUpdate(
+                    header.PacketIdentifier.Value,
+                    addValue: new(),
+                    updateValueFactory: (packetIdentifier, data) => data
+                );
+                _epsInfo[ep]._chunks[header.PacketIdentifier.Value].AddOrUpdate(
+                    header.ChunkNumber.Value,
+                    addValue: body,
+                    updateValueFactory: (chunkNumber, data) => data
+                );
+
+
+                // If we received all packets
+                if (_receivingChunks.ContainsKey(header.PacketIdentifier.Value) && _receivingChunks[header.PacketIdentifier.Value] == _epsInfo[ep]._chunks[header.PacketIdentifier.Value].Count)
+                {
+                    int offset = 0;
+                    foreach (KeyValuePair<uint, byte[]> chunk in _epsInfo[ep]._chunks[header.PacketIdentifier.Value].OrderBy(x => x.Key))
+                    {
+                        Array.Copy(chunk.Value, 0, body, offset, chunk.Value.Length);
+                        offset += chunk.Value.Length;
+                    }
+                    _receivingChunks.TryRemove(header.PacketIdentifier.Value, out uint totalChunksNumber);
+
+                    decryptedFullData = PacketUtilities.DecryptMessage(body, Identity.NSec, GetEPNPub(ep));
+
+                    string fileName = Encoding.UTF8.GetString(decryptedFullData);
+                    string temporaryFileName = $"{Path.GetFileNameWithoutExtension(fileName)}{_encryptedFileTag}{Path.GetExtension(fileName)}";
+                    string fileFullPath = Path.Combine(_defaultTempFileFolder, temporaryFileName);
+                    int counter = 1;
+
+                    // We create a temporary file to write file data to disk as soon as they arrive, to prevent abusing ram
+                    if (!Directory.Exists(_defaultTempFileFolder))
+                        Directory.CreateDirectory(_defaultTempFileFolder);
+                    FileStream fs = File.Create(fileFullPath);
+
+                    while (File.Exists(fileFullPath))
+                    {
+                        temporaryFileName = $"{Path.GetFileNameWithoutExtension(fileName)}_{counter++}_{Path.GetExtension(fileName)}";
+                        fileFullPath = Path.Combine(_defaultTempFileFolder, temporaryFileName);
+                    }
+
+                    _receivingFiles.AddOrUpdate(
+                        header.PacketIdentifier.Value,
+                        addValue: new(fileFullPath, totalChunksNumber, fs),
+                        updateValueFactory: (identifier, value) => value = new(fileFullPath, totalChunksNumber, fs)
+                    );
+
+                    return true;
+                }
+            }
+            else
+            {
+                decryptedFullData = PacketUtilities.DecryptMessage(body, Identity.NSec, GetEPNPub(ep));
+                return true;
+            }
+
+            return false;
+        }
+        private void ManageFileContentChunks(EndPoint receivedFrom, uint packetIdentifier, uint chunkNumber, byte[] data)
+        {
+            if (!_receivingFiles.ContainsKey(packetIdentifier))
+                return;
+
+
+            _receivingFiles[packetIdentifier].ChunksBuffer.TryAdd(chunkNumber, data);
+            while (
+                _receivingFiles[packetIdentifier].ChunksBuffer.Any()
+                && _receivingFiles[packetIdentifier].ChunksBuffer.OrderBy(x => x.Key).First().Key == _receivingFiles[packetIdentifier].CurrentChunk
+            )
+            {
+                uint newChunkNumber = _receivingFiles[packetIdentifier].ChunksBuffer.OrderBy(x => x.Key).First().Key;
+                _receivingFiles[packetIdentifier].CurrentChunk = newChunkNumber;
+                _receivingFiles[packetIdentifier].Stream.Write(data, 0, data.Length);
+                _receivingFiles[packetIdentifier].ChunksBuffer.TryRemove(newChunkNumber, out _);
+            }
+
+
+            // If file ended
+            if (_receivingFiles[packetIdentifier].AllChunksReceived)
+            {
+                string encryptedFileFullPath = _receivingFiles[packetIdentifier].FileFullPath;
+                _receivingFiles[packetIdentifier].Stream.Dispose();
+
+                // We create a temporary file to write file data to disk as soon as they arrive, to prevent abusing ram
+                if (!Directory.Exists(_defaultTempFileFolder))
+                    Directory.CreateDirectory(_defaultTempFileFolder);
+
+                byte[] encryptedData = File.ReadAllBytes(encryptedFileFullPath);
+                byte[] decryptedData = PacketUtilities.DecryptMessage(encryptedData, Identity.NSec, GetEPNPub(receivedFrom));
+                encryptedData = new byte[0];
+
+                string decryptedFileFullPath = encryptedFileFullPath.Replace(_encryptedFileTag, "");
+                int counter = 1;
+                while (File.Exists(decryptedFileFullPath))
+                    decryptedFileFullPath = $"{Path.GetDirectoryName(decryptedFileFullPath)}{Path.GetFileNameWithoutExtension(decryptedFileFullPath)}_{counter++}_{Path.GetExtension(decryptedFileFullPath)}";
+                File.WriteAllBytes(decryptedFileFullPath, decryptedData);
+                decryptedData = new byte[0];
+
+                string bech32 = "";
+                if (_epsInfo.ContainsKey(receivedFrom))
+                    bech32 = _epsInfo[receivedFrom].NPubBech32 ?? "";
+
+                OnFileReceived?.Invoke(receivedFrom, bech32, _receivingFiles[packetIdentifier].FileFullPath);
+                _receivingFiles.TryRemove(packetIdentifier, out FileData? fd);
+                if (fd is not null)
+                    fd.Dispose();
+            }
+        }
+
+
         private void Socket_OnMTUSizeExceed(EndPoint ep, ushort dataSize)
         {
             _epsInfo.AddOrUpdate(

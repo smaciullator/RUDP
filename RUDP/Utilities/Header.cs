@@ -6,8 +6,9 @@ namespace RUDP.Utilities
 {
     internal class Header
     {
-        internal const int _sigSize = 32;
+        internal const int _sigSize = 128;
         internal static int _minSize => 1/*Type*/ + _sigSize;
+        internal static int _minFileContentSize => _minSize + 4/*PacketIdentifier size*/ + 4/*ChunkNumber size*/;
 
 
         internal PacketType? Type { get; set; } = null;
@@ -20,44 +21,6 @@ namespace RUDP.Utilities
             + (ChunkNumber.HasValue ? 4 : 0);
 
 
-        internal static Header DATA(string? sig, uint uniqueIdentifier, uint chunkNumber)
-        {
-            return new()
-            {
-                Type = PacketType.DATA,
-                Signature = sig,
-                PacketIdentifier = uniqueIdentifier,
-                ChunkNumber = chunkNumber
-            };
-        }
-        internal static Header STREAM(string? sig)
-        {
-            return new()
-            {
-                Type = PacketType.STREAM,
-                Signature = sig
-            };
-        }
-        internal static Header FILE_PRESENTATION(string? sig, uint uniqueIdentifier, uint chunkNumber)
-        {
-            return new()
-            {
-                Type = PacketType.FILE_PRESENTATION,
-                Signature = sig,
-                PacketIdentifier = uniqueIdentifier,
-                ChunkNumber = chunkNumber
-            };
-        }
-        internal static Header FILE(string? sig, uint uniqueIdentifier, uint chunkNumber)
-        {
-            return new()
-            {
-                Type = PacketType.FILE,
-                Signature = sig,
-                PacketIdentifier = uniqueIdentifier,
-                ChunkNumber = chunkNumber
-            };
-        }
         internal static Header RTTA(string? sig, uint uniqueIdentifier)
         {
             return new()
@@ -86,6 +49,8 @@ namespace RUDP.Utilities
                 ChunkNumber = chunkNumber
             };
         }
+
+
         internal static Header MTU_DISCOVERY(string? sig, uint uniqueIdentifier)
         {
             return new()
@@ -104,6 +69,17 @@ namespace RUDP.Utilities
                 PacketIdentifier = uniqueIdentifier
             };
         }
+        internal static Header DISCONNECTION(string? sig, uint uniqueIdentifier)
+        {
+            return new()
+            {
+                Type = PacketType.DISCONNECTION,
+                Signature = sig,
+                PacketIdentifier = uniqueIdentifier
+            };
+        }
+
+
         internal static Header P2P_COORDINATION_REQUEST(string? sig, uint uniqueIdentifier)
         {
             return new()
@@ -139,15 +115,8 @@ namespace RUDP.Utilities
                 Signature = sig
             };
         }
-        internal static Header DISCONNECTION(string? sig, uint uniqueIdentifier)
-        {
-            return new()
-            {
-                Type = PacketType.DISCONNECTION,
-                Signature = sig,
-                PacketIdentifier = uniqueIdentifier
-            };
-        }
+
+
         internal static Header SIGNALING_PROPAGATION(string? sig, uint uniqueIdentifier)
         {
             return new()
@@ -155,6 +124,56 @@ namespace RUDP.Utilities
                 Type = PacketType.SIGNALING_PROPAGATION,
                 Signature = sig,
                 PacketIdentifier = uniqueIdentifier
+            };
+        }
+
+
+        internal static Header CHUNKS_PRESENTATION(string? sig, uint uniqueIdentifier, uint chunkNumber)
+        {
+            return new()
+            {
+                Type = PacketType.CHUNKS_PRESENTATION,
+                Signature = sig,
+                PacketIdentifier = uniqueIdentifier,
+                ChunkNumber = chunkNumber
+            };
+        }
+        internal static Header DATA(string? sig, uint uniqueIdentifier, uint chunkNumber)
+        {
+            return new()
+            {
+                Type = PacketType.DATA,
+                Signature = sig,
+                PacketIdentifier = uniqueIdentifier,
+                ChunkNumber = chunkNumber
+            };
+        }
+        internal static Header STREAM(string? sig)
+        {
+            return new()
+            {
+                Type = PacketType.STREAM,
+                Signature = sig
+            };
+        }
+        internal static Header FILE_PRESENTATION(string? sig, uint uniqueIdentifier, uint chunkNumber)
+        {
+            return new()
+            {
+                Type = PacketType.FILE_PRESENTATION,
+                Signature = sig,
+                PacketIdentifier = uniqueIdentifier,
+                ChunkNumber = chunkNumber
+            };
+        }
+        internal static Header FILE_CONTENT(string? sig, uint uniqueIdentifier, uint chunkNumber)
+        {
+            return new()
+            {
+                Type = PacketType.FILE_CONTENT,
+                Signature = sig,
+                PacketIdentifier = uniqueIdentifier,
+                ChunkNumber = chunkNumber
             };
         }
 
@@ -193,21 +212,8 @@ namespace RUDP.Utilities
             header.Type = (PacketType)span[0];
             switch (header.Type)
             {
-                case PacketType.DATA:
-                case PacketType.FILE_PRESENTATION:
-                case PacketType.FILE:
-                    header.Signature = Encoding.UTF8.GetString(span.Slice(1, _sigSize));
-                    header.PacketIdentifier = BitConverter.ToUInt16(span.Slice(1 + _sigSize, 4));
-                    header.ChunkNumber = BitConverter.ToUInt32(span.Slice(1 + _sigSize + 4, 4));
-                    break;
                 case PacketType.STREAM:
                     header.Signature = Encoding.UTF8.GetString(span.Slice(1, _sigSize));
-                    break;
-                case PacketType.ACKNOWLEDGEMENT:
-                    header.Signature = Encoding.UTF8.GetString(span.Slice(1, _sigSize));
-                    header.PacketIdentifier = BitConverter.ToUInt16(span.Slice(1 + _sigSize, 4));
-                    if (span.Length > 1 + _sigSize + 4)
-                        header.ChunkNumber = BitConverter.ToUInt32(span.Slice(1 + _sigSize + 4, 4));
                     break;
                 case PacketType.CONNECTION_POSSIBLE:
                     header.Signature = Encoding.UTF8.GetString(span.Slice(1, _sigSize));
@@ -217,17 +223,30 @@ namespace RUDP.Utilities
                 case PacketType.P2P_CONNECTION_COORDINATION:
                 case PacketType.P2P_COORDINATION_REQUEST:
                 case PacketType.UNKNOWN_IDENTITY:
+                case PacketType.SIGNALING_PROPAGATION:
                 case PacketType.DISCONNECTION:
                 case PacketType.RTTA:
                 case PacketType.RTTB:
                     header.Signature = Encoding.UTF8.GetString(span.Slice(1, _sigSize));
                     header.PacketIdentifier = BitConverter.ToUInt16(span.Slice(1 + _sigSize, 4));
                     break;
-                case PacketType.SIGNALING_PROPAGATION:
-                    header.PacketIdentifier = BitConverter.ToUInt16(span.Slice(_npubHexSizeBytes + 1, 4));
+                case PacketType.ACKNOWLEDGEMENT:
+                    header.Signature = Encoding.UTF8.GetString(span.Slice(1, _sigSize));
+                    header.PacketIdentifier = BitConverter.ToUInt16(span.Slice(1 + _sigSize, 4));
+                    if (span.Length > 1 + _sigSize + 4)
+                        header.ChunkNumber = BitConverter.ToUInt32(span.Slice(1 + _sigSize + 4, 4));
+                    break;
+                case PacketType.CHUNKS_PRESENTATION:
+                case PacketType.DATA:
+                case PacketType.FILE_PRESENTATION:
+                case PacketType.FILE_CONTENT:
+                    header.Signature = Encoding.UTF8.GetString(span.Slice(1, _sigSize));
+                    header.PacketIdentifier = BitConverter.ToUInt16(span.Slice(1 + _sigSize, 4));
+                    header.ChunkNumber = BitConverter.ToUInt32(span.Slice(1 + _sigSize + 4, 4));
                     break;
                 default:
                     break;
+            }
             return header;
         }
     }

@@ -1,6 +1,9 @@
-﻿using RUDP.Keys;
+﻿using RUDP.Extensions;
+using RUDP.Keys;
 using System.Net;
+using System.Reflection.PortableExecutable;
 using System.Security.Cryptography;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace RUDP.Utilities
 {
@@ -55,45 +58,46 @@ namespace RUDP.Utilities
         }
 
 
-        private static string? SignMessage(Header header, byte[] body, NSec senderKey)
+        private static byte[] GetSignablePacket(Header header, byte[] body)
         {
             header.Signature = null;
             byte[] head = header.Serialize();
             byte[] packet = new byte[head.Length + body.Length];
 
-            Array.Copy(head, 0, packet, 0, packet.Length);
-            Array.Copy(body, 0, packet, packet.Length, body.Length);
+            Array.Copy(head, 0, packet, 0, head.Length);
+            Array.Copy(body, 0, packet, head.Length, body.Length);
 
+            return packet;
+        }
+        private static string? SignMessage(Header header, byte[] body, NSec senderKey)
+        {
+            byte[] packet = GetSignablePacket(header, body);
             string? signature = senderKey.SignHex(packet);
             return signature;
         }
-        internal static bool IsSignatureValid(NPub npub, Header receivedHeader, Span<byte> receivedBody = new Span<byte>())
+        internal static bool IsSignatureValid(KeyPair identity, NPub npub, Header receivedHeader, Span<byte> receivedBody = new Span<byte>())
         {
             string? signature = receivedHeader.Signature;
             if (string.IsNullOrEmpty(signature))
                 return false;
 
-            receivedHeader.Signature = null;
-            byte[] head = receivedHeader.Serialize();
-            byte[] body = receivedBody.ToArray();
+            byte[] packet = GetSignablePacket(receivedHeader, receivedBody.ToArray());
+            byte[] hash = packet.GetSha256();
 
-            byte[] packet = new byte[head.Length + body.Length];
-            Array.Copy(head, 0, packet, 0, head.Length);
-            Array.Copy(head, 0, body, head.Length, body.Length);
-
-            return npub.IsHexSignatureValid(signature, packet);
+            return npub.IsHexSignatureValid(signature, hash);
         }
 
 
-        internal static byte[] CreatePacket(Header header, byte[]? data = null)
+        internal static byte[] CreatePacket(Header header, byte[]? body = null)
         {
             byte[] head = header.Serialize();
-            if (data is null)
+            if (body is null)
                 return head;
-            byte[] pkt = new byte[head.Length + data.Length];
+            byte[] pkt = new byte[head.Length + body.Length];
             Array.Copy(head, 0, pkt, 0, head.Length);
-            Array.Copy(data, 0, pkt, head.Length, data.Length);
+            Array.Copy(body, 0, pkt, head.Length, body.Length);
             head = new byte[0];
+            body = new byte[0];
             return pkt;
         }
 
@@ -161,7 +165,7 @@ namespace RUDP.Utilities
         )
         {
             Header header = Header.MTU_FOUND(null, uniqueIdentifier);
-            byte[] body = Body.MTU_FOUND(dataLenght, isSigServer);
+            byte[] body = Body.MTU_FOUND(senderKeys.NPub.Bech32, dataLenght, isSigServer);
 
             string? signature = SignMessage(header, body, senderKeys.NSec);
             header = Header.MTU_FOUND(signature, uniqueIdentifier);
@@ -237,6 +241,40 @@ namespace RUDP.Utilities
         }
 
 
+        internal static (Header header, byte[]? data) SIGNALING_PROPAGATION(
+            KeyPair senderKeys,
+            uint uniqueIdentifier,
+            NPub peerNPub,
+            EndPoint peerEndPoint,
+            byte relativeIndex,
+            NPub targetNpub
+        )
+        {
+            Header header = Header.SIGNALING_PROPAGATION(null, uniqueIdentifier);
+            byte[] body = Body.SIGNALING_PROPAGATION(peerNPub, peerEndPoint, relativeIndex);
+            byte[] encryptedBody = EncryptMessage(body, senderKeys.NSec, targetNpub);
+
+            string? signature = SignMessage(header, encryptedBody, senderKeys.NSec);
+            header = Header.SIGNALING_PROPAGATION(signature, uniqueIdentifier);
+
+            return (header, encryptedBody);
+        }
+
+
+        internal static (Header header, byte[]? data) CHUNKS_PRESENTATION(
+            KeyPair senderKeys,
+            uint uniqueIdentifier,
+            uint chunkNumber,
+            NPub targetNpub
+        )
+        {
+            Header header = Header.CHUNKS_PRESENTATION(null, uniqueIdentifier, chunkNumber);
+
+            string? signature = SignMessage(header, null, senderKeys.NSec);
+            header = Header.CHUNKS_PRESENTATION(signature, uniqueIdentifier, chunkNumber);
+
+            return (header, null);
+        }
         internal static (Header header, byte[]? data) DATA(
             KeyPair senderKeys,
             uint uniqueIdentifier,
@@ -283,7 +321,7 @@ namespace RUDP.Utilities
 
             return (header, body);
         }
-        internal static (Header header, byte[]? data) FILE(
+        internal static (Header header, byte[]? data) FILE_CONTENT(
             KeyPair senderKeys,
             uint uniqueIdentifier,
             uint chunkNumber,
@@ -291,11 +329,11 @@ namespace RUDP.Utilities
             NPub targetNpub
         )
         {
-            Header header = Header.FILE(null, uniqueIdentifier, chunkNumber);
+            Header header = Header.FILE_CONTENT(null, uniqueIdentifier, chunkNumber);
             byte[] body = EncryptMessage(rawData, senderKeys.NSec, targetNpub);
 
             string? signature = SignMessage(header, body, senderKeys.NSec);
-            header = Header.FILE(signature, uniqueIdentifier, chunkNumber);
+            header = Header.FILE_CONTENT(signature, uniqueIdentifier, chunkNumber);
 
             return (header, body);
         }

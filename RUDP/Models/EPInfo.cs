@@ -64,7 +64,7 @@ namespace RUDP.Models
         ///     - UniqueIdentifier
         ///     - IV Bytes to utf8 string
         /// </summary>
-        internal ConcurrentDictionary<uint, ConcurrentDictionary<string, ChunksInfo>> _chunks { get; set; } = new();
+        internal ConcurrentDictionary<uint, ConcurrentDictionary<uint, byte[]>> _chunks { get; set; } = new();
 
 
         private CongestionWindow CW { get; set; } = new();
@@ -303,12 +303,8 @@ namespace RUDP.Models
             CW.Dispose();
             _unack.Clear();
             _rttaBuffer.Clear();
-            foreach (KeyValuePair<uint, ConcurrentDictionary<string, ChunksInfo>> chunk in _chunks)
-            {
-                foreach (KeyValuePair<string, ChunksInfo> subChunk in chunk.Value)
-                    subChunk.Value.Dispose();
+            foreach (KeyValuePair<uint, ConcurrentDictionary<uint, byte[]>> chunk in _chunks)
                 chunk.Value.Clear();
-            }
             _chunks.Clear();
         }
     }
