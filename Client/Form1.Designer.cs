@@ -104,7 +104,7 @@
             // splitContainer1.Panel2
             // 
             splitContainer1.Panel2.Controls.Add(btnToggleSocket);
-            splitContainer1.Size = new Size(1123, 596);
+            splitContainer1.Size = new Size(312, 596);
             splitContainer1.SplitterDistance = 552;
             splitContainer1.TabIndex = 0;
             // 
@@ -123,7 +123,7 @@
             // splitContainer2.Panel2
             // 
             splitContainer2.Panel2.Controls.Add(lbMessage);
-            splitContainer2.Size = new Size(1123, 552);
+            splitContainer2.Size = new Size(312, 552);
             splitContainer2.SplitterDistance = 514;
             splitContainer2.TabIndex = 0;
             // 
@@ -136,7 +136,7 @@
             tabs.Location = new Point(0, 0);
             tabs.Name = "tabs";
             tabs.SelectedIndex = 0;
-            tabs.Size = new Size(1123, 514);
+            tabs.Size = new Size(312, 514);
             tabs.TabIndex = 0;
             // 
             // tbGenerals
@@ -161,7 +161,7 @@
             tbGenerals.Location = new Point(4, 24);
             tbGenerals.Name = "tbGenerals";
             tbGenerals.Padding = new Padding(3);
-            tbGenerals.Size = new Size(1115, 486);
+            tbGenerals.Size = new Size(304, 486);
             tbGenerals.TabIndex = 0;
             tbGenerals.Text = "Generals";
             tbGenerals.UseVisualStyleBackColor = true;
@@ -463,7 +463,7 @@
             btnToggleSocket.FlatStyle = FlatStyle.Popup;
             btnToggleSocket.Location = new Point(0, 0);
             btnToggleSocket.Name = "btnToggleSocket";
-            btnToggleSocket.Size = new Size(1123, 40);
+            btnToggleSocket.Size = new Size(312, 40);
             btnToggleSocket.TabIndex = 0;
             btnToggleSocket.Text = "Start";
             btnToggleSocket.UseVisualStyleBackColor = false;
@@ -474,7 +474,7 @@
             menuStrip1.Items.AddRange(new ToolStripItem[] { keysManagerToolStripMenuItem, clientToolStripMenuItem, nostrContactsToolStripMenuItem });
             menuStrip1.Location = new Point(0, 0);
             menuStrip1.Name = "menuStrip1";
-            menuStrip1.Size = new Size(1123, 24);
+            menuStrip1.Size = new Size(312, 24);
             menuStrip1.TabIndex = 1;
             menuStrip1.Text = "menuStrip1";
             // 
@@ -503,7 +503,7 @@
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(1123, 620);
+            ClientSize = new Size(312, 620);
             Controls.Add(splitContainer1);
             Controls.Add(menuStrip1);
             MainMenuStrip = menuStrip1;

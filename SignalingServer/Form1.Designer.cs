@@ -55,30 +55,16 @@ partial class Form1
         splitContainer3 = new SplitContainer();
         btnAddSignalingServer = new Button();
         dgvSignalingServers = new DataGridView();
-        iPV4AddressDataGridViewTextBoxColumn = new DataGridViewTextBoxColumn();
-        isConnectedDataGridViewCheckBoxColumn = new DataGridViewCheckBoxColumn();
         CurrentUploadSpeed = new DataGridViewTextBoxColumn();
         PacketsUploadPerSecond = new DataGridViewTextBoxColumn();
         CurrentDownloadSpeed = new DataGridViewTextBoxColumn();
-        dgvcPacketsDownloadPerSecond = new DataGridViewTextBoxColumn();
-        maxUploadSpeedDataGridViewTextBoxColumn = new DataGridViewTextBoxColumn();
-        dgvcSafeBandWidth = new DataGridViewTextBoxColumn();
-        mTUSizeDataGridViewTextBoxColumn = new DataGridViewTextBoxColumn();
-        nPubBech32DataGridViewTextBoxColumn = new DataGridViewTextBoxColumn();
         Delete = new DataGridViewButtonColumn();
         bsSignalingServers = new BindingSource(components);
         tbPeerNetwork = new TabPage();
         dgvPeers = new DataGridView();
-        dataGridViewTextBoxColumn1 = new DataGridViewTextBoxColumn();
-        dataGridViewCheckBoxColumn1 = new DataGridViewCheckBoxColumn();
         dataGridViewTextBoxColumn2 = new DataGridViewTextBoxColumn();
         dataGridViewTextBoxColumn3 = new DataGridViewTextBoxColumn();
         dataGridViewTextBoxColumn4 = new DataGridViewTextBoxColumn();
-        dataGridViewTextBoxColumn5 = new DataGridViewTextBoxColumn();
-        dataGridViewTextBoxColumn6 = new DataGridViewTextBoxColumn();
-        dataGridViewTextBoxColumn7 = new DataGridViewTextBoxColumn();
-        dataGridViewTextBoxColumn8 = new DataGridViewTextBoxColumn();
-        dataGridViewTextBoxColumn9 = new DataGridViewTextBoxColumn();
         bsPeers = new BindingSource(components);
         lbMessage = new Label();
         btnToggleServer = new Button();
@@ -123,7 +109,7 @@ partial class Form1
         // splitContainer1.Panel2
         // 
         splitContainer1.Panel2.Controls.Add(btnToggleServer);
-        splitContainer1.Size = new Size(1085, 495);
+        splitContainer1.Size = new Size(282, 495);
         splitContainer1.SplitterDistance = 453;
         splitContainer1.TabIndex = 0;
         // 
@@ -142,7 +128,7 @@ partial class Form1
         // splitContainer2.Panel2
         // 
         splitContainer2.Panel2.Controls.Add(lbMessage);
-        splitContainer2.Size = new Size(1085, 453);
+        splitContainer2.Size = new Size(282, 453);
         splitContainer2.SplitterDistance = 422;
         splitContainer2.TabIndex = 0;
         // 
@@ -155,7 +141,7 @@ partial class Form1
         tabs.Location = new Point(0, 0);
         tabs.Name = "tabs";
         tabs.SelectedIndex = 0;
-        tabs.Size = new Size(1085, 422);
+        tabs.Size = new Size(282, 422);
         tabs.TabIndex = 0;
         // 
         // tbGeneral
@@ -180,7 +166,7 @@ partial class Form1
         tbGeneral.Location = new Point(4, 24);
         tbGeneral.Name = "tbGeneral";
         tbGeneral.Padding = new Padding(3);
-        tbGeneral.Size = new Size(1077, 394);
+        tbGeneral.Size = new Size(274, 394);
         tbGeneral.TabIndex = 0;
         tbGeneral.Text = "General";
         tbGeneral.UseVisualStyleBackColor = true;
@@ -391,7 +377,7 @@ partial class Form1
         dgvSignalingServers.AllowUserToDeleteRows = false;
         dgvSignalingServers.AutoGenerateColumns = false;
         dgvSignalingServers.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
-        dgvSignalingServers.Columns.AddRange(new DataGridViewColumn[] { iPV4AddressDataGridViewTextBoxColumn, isConnectedDataGridViewCheckBoxColumn, CurrentUploadSpeed, PacketsUploadPerSecond, CurrentDownloadSpeed, dgvcPacketsDownloadPerSecond, maxUploadSpeedDataGridViewTextBoxColumn, dgvcSafeBandWidth, mTUSizeDataGridViewTextBoxColumn, nPubBech32DataGridViewTextBoxColumn, Delete });
+        dgvSignalingServers.Columns.AddRange(new DataGridViewColumn[] { CurrentUploadSpeed, PacketsUploadPerSecond, CurrentDownloadSpeed, Delete });
         dgvSignalingServers.DataSource = bsSignalingServers;
         dgvSignalingServers.Dock = DockStyle.Fill;
         dgvSignalingServers.Location = new Point(0, 0);
@@ -402,24 +388,6 @@ partial class Form1
         dgvSignalingServers.Size = new Size(1071, 353);
         dgvSignalingServers.TabIndex = 0;
         dgvSignalingServers.CellContentClick += dgvSignalingServers_CellContentClick;
-        // 
-        // iPV4AddressDataGridViewTextBoxColumn
-        // 
-        iPV4AddressDataGridViewTextBoxColumn.AutoSizeMode = DataGridViewAutoSizeColumnMode.AllCells;
-        iPV4AddressDataGridViewTextBoxColumn.DataPropertyName = "IPV4Address";
-        iPV4AddressDataGridViewTextBoxColumn.HeaderText = "EndPoint";
-        iPV4AddressDataGridViewTextBoxColumn.Name = "iPV4AddressDataGridViewTextBoxColumn";
-        iPV4AddressDataGridViewTextBoxColumn.ReadOnly = true;
-        iPV4AddressDataGridViewTextBoxColumn.Width = 80;
-        // 
-        // isConnectedDataGridViewCheckBoxColumn
-        // 
-        isConnectedDataGridViewCheckBoxColumn.AutoSizeMode = DataGridViewAutoSizeColumnMode.AllCells;
-        isConnectedDataGridViewCheckBoxColumn.DataPropertyName = "IsConnected";
-        isConnectedDataGridViewCheckBoxColumn.HeaderText = "Connected";
-        isConnectedDataGridViewCheckBoxColumn.Name = "isConnectedDataGridViewCheckBoxColumn";
-        isConnectedDataGridViewCheckBoxColumn.ReadOnly = true;
-        isConnectedDataGridViewCheckBoxColumn.Width = 71;
         // 
         // CurrentUploadSpeed
         // 
@@ -448,51 +416,6 @@ partial class Form1
         CurrentDownloadSpeed.ReadOnly = true;
         CurrentDownloadSpeed.Width = 111;
         // 
-        // dgvcPacketsDownloadPerSecond
-        // 
-        dgvcPacketsDownloadPerSecond.AutoSizeMode = DataGridViewAutoSizeColumnMode.AllCells;
-        dgvcPacketsDownloadPerSecond.DataPropertyName = "PacketsDownloadPerSecond";
-        dgvcPacketsDownloadPerSecond.HeaderText = "Packets Down";
-        dgvcPacketsDownloadPerSecond.Name = "dgvcPacketsDownloadPerSecond";
-        dgvcPacketsDownloadPerSecond.ReadOnly = true;
-        dgvcPacketsDownloadPerSecond.Width = 97;
-        // 
-        // maxUploadSpeedDataGridViewTextBoxColumn
-        // 
-        maxUploadSpeedDataGridViewTextBoxColumn.AutoSizeMode = DataGridViewAutoSizeColumnMode.AllCells;
-        maxUploadSpeedDataGridViewTextBoxColumn.DataPropertyName = "MaxUploadSpeed";
-        maxUploadSpeedDataGridViewTextBoxColumn.HeaderText = "Max Up Speed";
-        maxUploadSpeedDataGridViewTextBoxColumn.Name = "maxUploadSpeedDataGridViewTextBoxColumn";
-        maxUploadSpeedDataGridViewTextBoxColumn.ReadOnly = true;
-        maxUploadSpeedDataGridViewTextBoxColumn.Width = 99;
-        // 
-        // dgvcSafeBandWidth
-        // 
-        dgvcSafeBandWidth.AutoSizeMode = DataGridViewAutoSizeColumnMode.AllCells;
-        dgvcSafeBandWidth.DataPropertyName = "SafeBandWidth";
-        dgvcSafeBandWidth.HeaderText = "Safe Band Width";
-        dgvcSafeBandWidth.Name = "dgvcSafeBandWidth";
-        dgvcSafeBandWidth.ReadOnly = true;
-        dgvcSafeBandWidth.Width = 109;
-        // 
-        // mTUSizeDataGridViewTextBoxColumn
-        // 
-        mTUSizeDataGridViewTextBoxColumn.AutoSizeMode = DataGridViewAutoSizeColumnMode.AllCells;
-        mTUSizeDataGridViewTextBoxColumn.DataPropertyName = "MTUSize";
-        mTUSizeDataGridViewTextBoxColumn.HeaderText = "MTU";
-        mTUSizeDataGridViewTextBoxColumn.Name = "mTUSizeDataGridViewTextBoxColumn";
-        mTUSizeDataGridViewTextBoxColumn.ReadOnly = true;
-        mTUSizeDataGridViewTextBoxColumn.Width = 57;
-        // 
-        // nPubBech32DataGridViewTextBoxColumn
-        // 
-        nPubBech32DataGridViewTextBoxColumn.AutoSizeMode = DataGridViewAutoSizeColumnMode.ColumnHeader;
-        nPubBech32DataGridViewTextBoxColumn.DataPropertyName = "NPubBech32";
-        nPubBech32DataGridViewTextBoxColumn.HeaderText = "Identity";
-        nPubBech32DataGridViewTextBoxColumn.Name = "nPubBech32DataGridViewTextBoxColumn";
-        nPubBech32DataGridViewTextBoxColumn.ReadOnly = true;
-        nPubBech32DataGridViewTextBoxColumn.Width = 72;
-        // 
         // Delete
         // 
         Delete.AutoSizeMode = DataGridViewAutoSizeColumnMode.AllCells;
@@ -505,10 +428,6 @@ partial class Form1
         Delete.Name = "Delete";
         Delete.ReadOnly = true;
         Delete.Width = 46;
-        // 
-        // bsSignalingServers
-        // 
-        bsSignalingServers.DataSource = typeof(Models.EPDetailsInfo);
         // 
         // tbPeerNetwork
         // 
@@ -526,7 +445,7 @@ partial class Form1
         dgvPeers.AllowUserToDeleteRows = false;
         dgvPeers.AutoGenerateColumns = false;
         dgvPeers.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
-        dgvPeers.Columns.AddRange(new DataGridViewColumn[] { dataGridViewTextBoxColumn1, dataGridViewCheckBoxColumn1, dataGridViewTextBoxColumn2, dataGridViewTextBoxColumn3, dataGridViewTextBoxColumn4, dataGridViewTextBoxColumn5, dataGridViewTextBoxColumn6, dataGridViewTextBoxColumn7, dataGridViewTextBoxColumn8, dataGridViewTextBoxColumn9 });
+        dgvPeers.Columns.AddRange(new DataGridViewColumn[] { dataGridViewTextBoxColumn2, dataGridViewTextBoxColumn3, dataGridViewTextBoxColumn4 });
         dgvPeers.DataSource = bsPeers;
         dgvPeers.Dock = DockStyle.Fill;
         dgvPeers.Location = new Point(0, 0);
@@ -536,24 +455,6 @@ partial class Form1
         dgvPeers.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
         dgvPeers.Size = new Size(1077, 394);
         dgvPeers.TabIndex = 1;
-        // 
-        // dataGridViewTextBoxColumn1
-        // 
-        dataGridViewTextBoxColumn1.AutoSizeMode = DataGridViewAutoSizeColumnMode.AllCells;
-        dataGridViewTextBoxColumn1.DataPropertyName = "IPV4Address";
-        dataGridViewTextBoxColumn1.HeaderText = "EndPoint";
-        dataGridViewTextBoxColumn1.Name = "dataGridViewTextBoxColumn1";
-        dataGridViewTextBoxColumn1.ReadOnly = true;
-        dataGridViewTextBoxColumn1.Width = 80;
-        // 
-        // dataGridViewCheckBoxColumn1
-        // 
-        dataGridViewCheckBoxColumn1.AutoSizeMode = DataGridViewAutoSizeColumnMode.AllCells;
-        dataGridViewCheckBoxColumn1.DataPropertyName = "IsConnected";
-        dataGridViewCheckBoxColumn1.HeaderText = "Connected";
-        dataGridViewCheckBoxColumn1.Name = "dataGridViewCheckBoxColumn1";
-        dataGridViewCheckBoxColumn1.ReadOnly = true;
-        dataGridViewCheckBoxColumn1.Width = 71;
         // 
         // dataGridViewTextBoxColumn2
         // 
@@ -582,55 +483,6 @@ partial class Form1
         dataGridViewTextBoxColumn4.ReadOnly = true;
         dataGridViewTextBoxColumn4.Width = 111;
         // 
-        // dataGridViewTextBoxColumn5
-        // 
-        dataGridViewTextBoxColumn5.AutoSizeMode = DataGridViewAutoSizeColumnMode.AllCells;
-        dataGridViewTextBoxColumn5.DataPropertyName = "PacketsDownloadPerSecond";
-        dataGridViewTextBoxColumn5.HeaderText = "Packets Down";
-        dataGridViewTextBoxColumn5.Name = "dataGridViewTextBoxColumn5";
-        dataGridViewTextBoxColumn5.ReadOnly = true;
-        dataGridViewTextBoxColumn5.Width = 97;
-        // 
-        // dataGridViewTextBoxColumn6
-        // 
-        dataGridViewTextBoxColumn6.AutoSizeMode = DataGridViewAutoSizeColumnMode.AllCells;
-        dataGridViewTextBoxColumn6.DataPropertyName = "MaxUploadSpeed";
-        dataGridViewTextBoxColumn6.HeaderText = "Max Up Speed";
-        dataGridViewTextBoxColumn6.Name = "dataGridViewTextBoxColumn6";
-        dataGridViewTextBoxColumn6.ReadOnly = true;
-        dataGridViewTextBoxColumn6.Width = 99;
-        // 
-        // dataGridViewTextBoxColumn7
-        // 
-        dataGridViewTextBoxColumn7.AutoSizeMode = DataGridViewAutoSizeColumnMode.AllCells;
-        dataGridViewTextBoxColumn7.DataPropertyName = "SafeBandWidth";
-        dataGridViewTextBoxColumn7.HeaderText = "Safe Band Width";
-        dataGridViewTextBoxColumn7.Name = "dataGridViewTextBoxColumn7";
-        dataGridViewTextBoxColumn7.ReadOnly = true;
-        dataGridViewTextBoxColumn7.Width = 109;
-        // 
-        // dataGridViewTextBoxColumn8
-        // 
-        dataGridViewTextBoxColumn8.AutoSizeMode = DataGridViewAutoSizeColumnMode.AllCells;
-        dataGridViewTextBoxColumn8.DataPropertyName = "MTUSize";
-        dataGridViewTextBoxColumn8.HeaderText = "MTU";
-        dataGridViewTextBoxColumn8.Name = "dataGridViewTextBoxColumn8";
-        dataGridViewTextBoxColumn8.ReadOnly = true;
-        dataGridViewTextBoxColumn8.Width = 57;
-        // 
-        // dataGridViewTextBoxColumn9
-        // 
-        dataGridViewTextBoxColumn9.AutoSizeMode = DataGridViewAutoSizeColumnMode.ColumnHeader;
-        dataGridViewTextBoxColumn9.DataPropertyName = "NPubBech32";
-        dataGridViewTextBoxColumn9.HeaderText = "Identity";
-        dataGridViewTextBoxColumn9.Name = "dataGridViewTextBoxColumn9";
-        dataGridViewTextBoxColumn9.ReadOnly = true;
-        dataGridViewTextBoxColumn9.Width = 72;
-        // 
-        // bsPeers
-        // 
-        bsPeers.DataSource = typeof(Models.EPDetailsInfo);
-        // 
         // lbMessage
         // 
         lbMessage.AutoSize = true;
@@ -650,7 +502,7 @@ partial class Form1
         btnToggleServer.Font = new Font("Segoe UI", 13F, FontStyle.Bold);
         btnToggleServer.Location = new Point(0, 0);
         btnToggleServer.Name = "btnToggleServer";
-        btnToggleServer.Size = new Size(1085, 38);
+        btnToggleServer.Size = new Size(282, 38);
         btnToggleServer.TabIndex = 5;
         btnToggleServer.Text = "Start";
         btnToggleServer.UseVisualStyleBackColor = false;
@@ -661,7 +513,7 @@ partial class Form1
         menu.Items.AddRange(new ToolStripItem[] { keysManagerToolStripMenuItem, serverParametersToolStripMenuItem });
         menu.Location = new Point(0, 0);
         menu.Name = "menu";
-        menu.Size = new Size(1085, 24);
+        menu.Size = new Size(282, 24);
         menu.TabIndex = 1;
         menu.Text = "menuStrip1";
         // 
@@ -683,7 +535,7 @@ partial class Form1
         // 
         AutoScaleDimensions = new SizeF(7F, 15F);
         AutoScaleMode = AutoScaleMode.Font;
-        ClientSize = new Size(1085, 519);
+        ClientSize = new Size(282, 519);
         Controls.Add(splitContainer1);
         Controls.Add(menu);
         MainMenuStrip = menu;

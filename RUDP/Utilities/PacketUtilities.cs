@@ -58,18 +58,19 @@ namespace RUDP.Utilities
         }
 
 
-        private static byte[] GetSignablePacket(Header header, byte[] body)
+        private static byte[] GetSignablePacket(Header header, byte[]? body)
         {
             header.Signature = null;
             byte[] head = header.Serialize();
-            byte[] packet = new byte[head.Length + body.Length];
+            byte[] packet = new byte[head.Length + (body is null ? 0 : body.Length)];
 
             Array.Copy(head, 0, packet, 0, head.Length);
-            Array.Copy(body, 0, packet, head.Length, body.Length);
+            if (body is not null)
+                Array.Copy(body, 0, packet, head.Length, body.Length);
 
             return packet;
         }
-        private static string? SignMessage(Header header, byte[] body, NSec senderKey)
+        private static string? SignMessage(Header header, byte[]? body, NSec senderKey)
         {
             byte[] packet = GetSignablePacket(header, body);
             string? signature = senderKey.SignHex(packet);

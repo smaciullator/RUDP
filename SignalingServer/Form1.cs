@@ -235,7 +235,7 @@ public partial class Form1 : Form
             updateValueFactory: (npub, eps) => eps.SetEndPoint(ep, relativeIndex, eps.Connected)
         );
     }
-    private void _socket_OnP2PCoordinationRequest(EndPoint receivedFrom, string requestedBech32NPub, string a)
+    private void _socket_OnP2PCoordinationRequest(EndPoint receivedFrom, string a, string requestedBech32NPub)
     {
         if (
             // If we don't know this requested NPub or we don't have any valid endpoint to provide
@@ -259,9 +259,9 @@ public partial class Form1 : Form
 
         KeyValuePair<string, PeerEPs> sender = _connectedPeers.First(x => x.Value.IsValid() && x.Value.EndPointIsKnown(receivedFrom));
         // First, we send the requested npub's endpoints to the peer who asked this coordination
-        _socket.SendP2PConnectionCoordination(receivedFrom, requestedBech32NPub, _connectedPeers[requestedBech32NPub].EP1, _connectedPeers[requestedBech32NPub].EP2, _connectedPeers[requestedBech32NPub].EP3);
+        bool sended1 = _socket.SendP2PConnectionCoordination(receivedFrom, requestedBech32NPub, _connectedPeers[requestedBech32NPub].EP1, _connectedPeers[requestedBech32NPub].EP2, _connectedPeers[requestedBech32NPub].EP3);
         // Second, we send the requester's endpoints to the requested 
-        _socket.SendP2PConnectionCoordination(requestedEndPoint, sender.Key, sender.Value.EP1, sender.Value.EP2, sender.Value.EP3);
+        bool sended2 = _socket.SendP2PConnectionCoordination(requestedEndPoint, sender.Key, sender.Value.EP1, sender.Value.EP2, sender.Value.EP3);
     }
     private void _socket_OnRateUpdated(Rates rates, List<EPInfo> epsRates, int sendBufferFillPercentage)
     {

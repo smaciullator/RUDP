@@ -7,6 +7,7 @@ using NostrSharp.Relay.Models;
 using RUDP;
 using RUDP.Extensions;
 using RUDP.Utilities;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
@@ -23,10 +24,12 @@ namespace Client
             new("relay.nostr.band"),
             new("relay.snort.social"),
             new("nostr.orangepill.dev"),
-            new("nostr.wine")
+            new("nostr.wine"),
+            new("wss://nostr-01.yakihonne.com"),
+            new("wss://nostr-02.yakihonne.com")
         };
         private NSMain ns { get; set; } = new();
-        private Dictionary<string, UserMetadata> _cache { get; set; } = new();
+        private ConcurrentDictionary<string, UserMetadata> _cache { get; set; } = new();
         public List<UserMetadata> _contacts { get; set; } = new();
         public List<UserMetadata> _filteredContacts { get; set; } = new();
 
@@ -42,7 +45,7 @@ namespace Client
         }
         private async void NostrContacts_Load(object sender, EventArgs e)
         {
-            _cache = JsonConvert.DeserializeObject<Dictionary<string, UserMetadata>>(Properties.Settings.Default.NostrContactsCache) ?? new();
+            _cache = JsonConvert.DeserializeObject<ConcurrentDictionary<string, UserMetadata>>(Properties.Settings.Default.NostrContactsCache) ?? new();
             _contacts = _cache.Values.DistinctBy(x => x.PubKey).ToList();
 
             if (ns.Init(NSec.FromBech32(Properties.Settings.Default.NSecBech32).DerivePublicKey()))

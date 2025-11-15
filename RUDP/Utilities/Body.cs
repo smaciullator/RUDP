@@ -139,9 +139,9 @@ namespace RUDP.Utilities
             {
                 peerNPub = null;
             }
-            peerEP1 = body.Slice(63, 21).ToArray().ToUTF8String().Replace("_", "").ToEndPoint();
-            peerEP2 = body.Slice(84, 21).ToArray().ToUTF8String().Replace("_", "").ToEndPoint();
-            peerEP3 = body.Slice(105, 21).ToArray().ToUTF8String().Replace("_", "").ToEndPoint();
+            peerEP1 = body.Slice(58, 21).ToArray().ToUTF8String().Replace("_", "").ToEndPoint();
+            peerEP2 = body.Slice(79, 21).ToArray().ToUTF8String().Replace("_", "").ToEndPoint();
+            peerEP3 = body.Slice(100, 21).ToArray().ToUTF8String().Replace("_", "").ToEndPoint();
             return peerNPub is not null;
         }
 
