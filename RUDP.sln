@@ -11,6 +11,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Client", "Client\Client.csp
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SignalingServer", "SignalingServer\SignalingServer.csproj", "{12076DB3-8128-4C2D-A441-D53CC23AAD83}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SignalingService", "SignalingService\SignalingService.csproj", "{D61DB89C-A3E9-4C41-9042-F46FA93CCB58}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -33,6 +35,10 @@ Global
 		{12076DB3-8128-4C2D-A441-D53CC23AAD83}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{12076DB3-8128-4C2D-A441-D53CC23AAD83}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{12076DB3-8128-4C2D-A441-D53CC23AAD83}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D61DB89C-A3E9-4C41-9042-F46FA93CCB58}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D61DB89C-A3E9-4C41-9042-F46FA93CCB58}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D61DB89C-A3E9-4C41-9042-F46FA93CCB58}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D61DB89C-A3E9-4C41-9042-F46FA93CCB58}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

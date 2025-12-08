@@ -5,6 +5,7 @@ using RUDP;
 using RUDP.Enums;
 using RUDP.Extensions;
 using RUDP.Models;
+using RUDP.Utilities;
 using System.Collections.Concurrent;
 using System.Net;
 
@@ -19,9 +20,6 @@ namespace Client
         private ConcurrentDictionary<string, PeerEPs> _connectedPeers { get; set; } = new();
         private List<EPDetailsInfo> _signalingServersInfos { get; set; } = new();
         private List<EPDetailsInfo> _peersInfos { get; set; } = new();
-
-        private SemaphoreSlim _disconnectionSemaphore { get; set; } = new(1);
-        private string _disconnectingNPub { get; set; } = "";
 
 
         public Form1()
@@ -126,6 +124,7 @@ namespace Client
             _socket.OnConnectionConfirmed += _socket_OnConnectionConfirmed;
             _socket.OnConnectionClosed += _socket_OnConnectionClosed;
             _socket.OnRateUpdated += _socket_OnRateUpdated;
+            _socket.OnPacketReceived += _socket_OnPacketReceived;
         }
         private void UnbindEvents()
         {
@@ -135,6 +134,7 @@ namespace Client
             _socket.OnConnectionConfirmed -= _socket_OnConnectionConfirmed;
             _socket.OnConnectionClosed -= _socket_OnConnectionClosed;
             _socket.OnRateUpdated += _socket_OnRateUpdated;
+            _socket.OnPacketReceived -= _socket_OnPacketReceived;
         }
         private void RunBackgroundTask()
         {
@@ -202,29 +202,6 @@ namespace Client
                         updateValueFactory: (npub, eps) => eps.SetRelativeIndexEndPoint(ep, relativeIndex, true)
                     );
                     lbMessage.Text = $"Peer connected with endpoint {ep.ToIPV4String()}";
-
-
-                    Task.Factory.StartNew(async () =>
-                    {
-                        EndPoint localEP = ep;
-                        string bech32 = bech32NPub;
-                        while (_connectedPeers.ContainsKey(bech32) && _socket is not null)
-                            try
-                            {
-                                _disconnectionSemaphore.Wait();
-                                if (!string.IsNullOrEmpty(_disconnectingNPub) && _disconnectingNPub == bech32)
-                                {
-                                    _disconnectingNPub = "";
-                                    break;
-                                }
-                                _socket.SendData(localEP, new byte[500]);
-                                _disconnectionSemaphore.Release();
-                            }
-                            catch
-                            {
-                                _disconnectionSemaphore.Release();
-                            }
-                    }, TaskCreationOptions.LongRunning);
                 }
             });
         }
@@ -232,11 +209,6 @@ namespace Client
         {
             BeginInvoke((MethodInvoker)delegate
             {
-                _disconnectionSemaphore.Wait();
-                _disconnectingNPub = bech32NPub;
-                _disconnectionSemaphore.Release();
-
-
                 lbTotConnectedSigServers.Text = _socket.TotalConnectedSigServers.ToString();
                 lbTotConnectedPeers.Text = _socket.TotalConnectedPeers.ToString();
 
@@ -259,27 +231,14 @@ namespace Client
                 lbPacketsDownload.Text = rates.ReceivedPacketsPerSecond.ToString() + " packet/s";
             });
         }
-        private void _socket_OnRateUpdated(EndPoint ep, EPInfo info)
+        private void _socket_OnPacketReceived(EndPoint ep, Header header, byte[] body, long timestamp)
         {
-            //BeginInvoke((MethodInvoker)delegate
-            //{
-            //    if (info.IsSigServer)
-            //    {
-            //        EPInfo? sigServ = _signalingServersInfos.FirstOrDefault(x => x.EndPoint.EqualTo(ep));
-            //        if (sigServ is null)
-            //            _signalingServersInfos.Add(new EPDetailsInfo(info));
-            //        else
-            //            sigServ = info;
-            //    }
-            //    else
-            //    {
-            //        EPInfo? peer = _peersInfos.FirstOrDefault(x => x.EndPoint.EqualTo(ep));
-            //        if (peer is null)
-            //            _peersInfos.Add(new EPDetailsInfo(info));
-            //        else
-            //            peer = info;
-            //    }
-            //});
+            if (header.Type == PacketType.RTTA || header.Type == PacketType.RTTB)
+                return;
+            BeginInvoke((MethodInvoker)delegate
+            {
+                lbLastPktReceived.Text = header.Type.ToString();
+            });
         }
 
 
@@ -313,6 +272,95 @@ namespace Client
                     return;
                 _socket.DisconnectFrom(item.EndPoint);
             }
+        }
+
+
+        private bool _sending = false;
+        private void btnSendDataOnce_Click(object sender, EventArgs e)
+        {
+            int.TryParse(tbDataSize.Text, out int dataSize);
+            dataSize = dataSize <= 0 ? 500 : dataSize;
+
+            foreach (EPInfo peer in _socket.PeersNetwork.Where(x => x.IsConnected))
+                try
+                {
+                    _socket.SendData(peer.EndPoint, new byte[dataSize]);
+                }
+                catch
+                {
+                }
+        }
+        private void btnSendDataContinuosly_Click(object sender, EventArgs e)
+        {
+            if (_sending)
+            {
+                _sending = false;
+                btnSendDataContinuosly.Text = "Send Data Continuosly";
+            }
+            else
+            {
+                Task.Factory.StartNew(async () =>
+                {
+                    int.TryParse(tbDataSize.Text, out int dataSize);
+                    dataSize = dataSize <= 0 ? 500 : dataSize;
+
+                    _sending = true;
+                    BeginInvoke((MethodInvoker)delegate
+                    {
+                        btnSendDataContinuosly.Text = "Sending...";
+                    });
+
+                    while (_socket is not null && _sending && _socket.PeersNetwork.Any(x => x.IsConnected))
+                    {
+                        foreach (EPInfo peer in _socket.PeersNetwork.Where(x => x.IsConnected))
+                            try
+                            {
+                                _socket.SendData(peer.EndPoint, new byte[dataSize]);
+                            }
+                            catch
+                            {
+                            }
+                    }
+                }, TaskCreationOptions.LongRunning);
+            }
+        }
+        private void btnSendStream_Click(object sender, EventArgs e)
+        {
+            if (_sending)
+            {
+                _sending = false;
+                btnSendStream.Text = "Send Stream";
+            }
+            else
+            {
+                Task.Factory.StartNew(async () =>
+                {
+                    int.TryParse(tbDataSize.Text, out int dataSize);
+                    dataSize = dataSize <= 0 ? 500 : dataSize;
+
+                    _sending = true;
+                    BeginInvoke((MethodInvoker)delegate
+                    {
+                        btnSendStream.Text = "Sending...";
+                    });
+
+                    while (_socket is not null && _sending && _socket.PeersNetwork.Any(x => x.IsConnected))
+                    {
+                        foreach (EPInfo peer in _socket.PeersNetwork.Where(x => x.IsConnected))
+                            try
+                            {
+                                _socket.SendStream(peer.EndPoint, new byte[dataSize]);
+                            }
+                            catch
+                            {
+                            }
+                    }
+                }, TaskCreationOptions.LongRunning);
+            }
+        }
+        private void btnSendFile_Click(object sender, EventArgs e)
+        {
+
         }
     }
 }

@@ -4,14 +4,14 @@ using RUDP.Extensions;
 
 namespace RUDP.Keys
 {
-    internal class NPub : IEquatable<NPub>
+    public class NPub : IEquatable<NPub>
     {
-        internal string Hex { get; }
-        internal string Bech32 { get; }
-        internal ECXOnlyPubKey Ec { get; }
+        public string Hex { get; }
+        public string Bech32 { get; }
+        public ECXOnlyPubKey Ec { get; }
 
 
-        internal NPub(string hex, string bech32, ECXOnlyPubKey ec)
+        public NPub(string hex, string bech32, ECXOnlyPubKey ec)
         {
             Hex = hex;
             Bech32 = bech32;
@@ -25,7 +25,7 @@ namespace RUDP.Keys
         /// <param name="signatureHex"></param>
         /// <param name="hex"></param>
         /// <returns></returns>
-        internal bool IsHexSignatureValid(string signatureHex, byte[] hex)
+        public bool IsHexSignatureValid(string signatureHex, byte[] hex)
         {
             if (string.IsNullOrEmpty(signatureHex))
                 return false;
@@ -35,27 +35,27 @@ namespace RUDP.Keys
         }
 
 
-        internal static NPub FromHex(string hex)
+        public static NPub FromHex(string hex)
         {
             ECXOnlyPubKey ec = ECXOnlyPubKey.Create(hex.HexToByteArray());
             string bech32 = hex.HexToNpubBech32() ?? string.Empty;
             return new NPub(hex, bech32, ec);
         }
-        internal static NPub FromBech32(string bech32)
+        public static NPub FromBech32(string bech32)
         {
             string? hex = bech32.Bech32ToHexKey(out string? hrp);
             if (!Bech32Identifiers.NPub.Equals(hrp, StringComparison.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(hex))
                 throw new ArgumentException("Provided bech32 key is not 'npub'", nameof(bech32));
             return FromHex(hex);
         }
-        internal static NPub FromEc(ECXOnlyPubKey ec)
+        public static NPub FromEc(ECXOnlyPubKey ec)
         {
             string hex = ec.ToBytes().ToHexString();
             if (string.IsNullOrWhiteSpace(hex))
                 throw new ArgumentException("Provided ec key is not correct", nameof(ec));
             return FromHex(hex);
         }
-        internal static NPub FromPrivateEc(ECPrivKey ec)
+        public static NPub FromPrivateEc(ECPrivKey ec)
         {
             ECXOnlyPubKey publicEc = ec.CreateXOnlyPubKey();
             return FromEc(publicEc);

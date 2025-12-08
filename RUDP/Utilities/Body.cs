@@ -5,9 +5,9 @@ using System.Text;
 
 namespace RUDP.Utilities
 {
-    internal class Body
+    public class Body
     {
-        internal static byte[] MTU_DISCOVERY(string nPubBech32, int dataSize, byte relativeIndex = 0)
+        public static byte[] MTU_DISCOVERY(string nPubBech32, int dataSize, byte relativeIndex = 0)
         {
             byte[] body = new byte[dataSize];
             byte[] bech32 = nPubBech32.Replace("npub1", "").UTF8AsByteArray();
@@ -16,7 +16,7 @@ namespace RUDP.Utilities
             bech32 = new byte[0];
             return body;
         }
-        internal static bool MTU_DISCOVERY(Span<byte> body, out NPub? npub, out byte relativeIndex)
+        public static bool MTU_DISCOVERY(Span<byte> body, out NPub? npub, out byte relativeIndex)
         {
             npub = null;
             relativeIndex = 0;
@@ -33,7 +33,7 @@ namespace RUDP.Utilities
             return npub is not null;
         }
 
-        internal static byte[] MTU_FOUND(string nPubBech32, ushort dataLenght, bool isSigServer)
+        public static byte[] MTU_FOUND(string nPubBech32, ushort dataLenght, bool isSigServer)
         {
             byte[] bech32 = nPubBech32.Replace("npub1", "").UTF8AsByteArray();
             byte[] dl = BitConverter.GetBytes(dataLenght);
@@ -46,7 +46,7 @@ namespace RUDP.Utilities
             dl = new byte[0];
             return body;
         }
-        internal static bool MTU_FOUND(Span<byte> body, out NPub? npub, out ushort? dataLenght, out bool? isSigServer)
+        public static bool MTU_FOUND(Span<byte> body, out NPub? npub, out ushort? dataLenght, out bool? isSigServer)
         {
             npub = null;
             string bech32 = body.Slice(0, 58).ToArray().ToUTF8String();
@@ -65,11 +65,11 @@ namespace RUDP.Utilities
         }
 
 
-        internal static byte[] P2P_COORDINATION_REQUEST(NPub npub)
+        public static byte[] P2P_COORDINATION_REQUEST(NPub npub)
         {
             return npub.Bech32.Replace("npub1", "").UTF8AsByteArray();
         }
-        internal static bool P2P_COORDINATION_REQUEST(Span<byte> body, out NPub? requestedNPub)
+        public static bool P2P_COORDINATION_REQUEST(Span<byte> body, out NPub? requestedNPub)
         {
             requestedNPub = null;
             string bech32 = body.Slice(0, 58).ToArray().ToUTF8String();
@@ -84,11 +84,11 @@ namespace RUDP.Utilities
             return requestedNPub is not null;
         }
 
-        internal static byte[] UNKNOWN_IDENTITY(NPub npub)
+        public static byte[] UNKNOWN_IDENTITY(NPub npub)
         {
             return npub.Bech32.Replace("npub1", "").UTF8AsByteArray();
         }
-        internal static bool UNKNOWN_IDENTITY(Span<byte> body, out NPub? requestedNPub)
+        public static bool UNKNOWN_IDENTITY(Span<byte> body, out NPub? requestedNPub)
         {
             requestedNPub = null;
             string bech32 = body.Slice(0, 58).ToArray().ToUTF8String();
@@ -103,7 +103,7 @@ namespace RUDP.Utilities
             return requestedNPub is not null;
         }
 
-        internal static byte[] P2P_CONNECTION_COORDINATION(NPub npub, EndPoint? peerEP1, EndPoint? peerEP2, EndPoint? peerEP3)
+        public static byte[] P2P_CONNECTION_COORDINATION(NPub npub, EndPoint? peerEP1, EndPoint? peerEP2, EndPoint? peerEP3)
         {
             byte[] encryptedNPub = npub.Bech32.Replace("npub1", "").UTF8AsByteArray();
 
@@ -123,7 +123,7 @@ namespace RUDP.Utilities
             encryptedEP3 = new byte[0];
             return body;
         }
-        internal static bool P2P_CONNECTION_COORDINATION(Span<byte> body, out NPub? peerNPub, out EndPoint? peerEP1, out EndPoint? peerEP2, out EndPoint? peerEP3)
+        public static bool P2P_CONNECTION_COORDINATION(Span<byte> body, out NPub? peerNPub, out EndPoint? peerEP1, out EndPoint? peerEP2, out EndPoint? peerEP3)
         {
             peerNPub = null;
             peerEP1 = null;
@@ -145,11 +145,11 @@ namespace RUDP.Utilities
             return peerNPub is not null;
         }
 
-        internal static byte[] CONNECTION_POSSIBLE(string nPubBech32)
+        public static byte[] CONNECTION_POSSIBLE(string nPubBech32)
         {
             return Encoding.UTF8.GetBytes(nPubBech32.Replace("npub1", ""));
         }
-        internal static bool CONNECTION_POSSIBLE(Span<byte> body, out NPub? npub)
+        public static bool CONNECTION_POSSIBLE(Span<byte> body, out NPub? npub)
         {
             npub = null;
             string bech32 = body.Slice(0, 58).ToArray().ToUTF8String();
@@ -165,7 +165,7 @@ namespace RUDP.Utilities
         }
 
 
-        internal static byte[] SIGNALING_PROPAGATION(NPub peerNPub, EndPoint peerEP, byte relativeIndex)
+        public static byte[] SIGNALING_PROPAGATION(NPub peerNPub, EndPoint peerEP, byte relativeIndex)
         {
             byte[] bech32 = peerNPub.Bech32.Replace("npub1", "").UTF8AsByteArray();
             byte[] ep = peerEP.ToIPV4String().PadRight(21, '_').UTF8AsByteArray();
@@ -177,7 +177,7 @@ namespace RUDP.Utilities
             body[body.Length - 1] = relativeIndex;
             return body;
         }
-        internal static bool SIGNALING_PROPAGATION(Span<byte> body, out NPub? peerNPub, out EndPoint? peerEP, out byte relativeIndex)
+        public static bool SIGNALING_PROPAGATION(Span<byte> body, out NPub? peerNPub, out EndPoint? peerEP, out byte relativeIndex)
         {
             peerNPub = null;
             peerEP = null;
@@ -198,7 +198,7 @@ namespace RUDP.Utilities
         }
 
 
-        internal static byte[] ExtractFromPacket(byte[] packet)
+        public static byte[] ExtractFromPacket(byte[] packet)
         {
             byte[] header = Header.Deserialize(packet).Serialize();
             return new Span<byte>(packet).Slice(header.Length).ToArray();

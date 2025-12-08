@@ -7,7 +7,10 @@ using System.Collections.Concurrent;
 using System.Data;
 using System.Diagnostics;
 using System.Net;
+using System.Net.Sockets;
+using System.Reflection.PortableExecutable;
 using System.Text;
+using static RUDP.MultiThreadUDPSocket;
 
 namespace RUDP
 {
@@ -19,6 +22,7 @@ namespace RUDP
         public delegate void EventHandler<T1, T2, T3>(T1 p1, T2 p2, T3 p3);
         public delegate void EventHandler<T1, T2, T3, T4>(T1 p1, T2 p2, T3 p3, T4 p4);
         public event EventHandler<Exception> OnException;
+        public event EventHandler<EndPoint, Header, byte[], long> OnPacketReceived;
         /// <summary>
         /// Triggered when a connection is succesfully completed (path found, mtu negotiation, identities exchanged
         /// </summary>
@@ -388,7 +392,7 @@ namespace RUDP
         {
             try
             {
-                return Send(sendTo, PacketUtilities.CONNECTION_POSSIBLE(Identity), false);
+                return Send(sendTo, PacketUtilities.CONNECTION_POSSIBLE(Identity), true);
             }
             catch
             {
@@ -499,7 +503,7 @@ namespace RUDP
                 byte[] data = PacketUtilities.CreatePacket(pkt.header, pkt.data);
                 bool sent = socket.Send(sendTo, data);
                 if (requireAck)
-                    _epsInfo.AddOrUpdate(sendTo, addValue: new(sendTo), updateValueFactory: (endpoint, value) => value.AddUnackPacket(data));
+                    _epsInfo.AddOrUpdate(sendTo, addValue: new(sendTo), updateValueFactory: (endpoint, value) => value.AddUnackPacket(pkt.header, data));
                 return sent;
             }
             else
@@ -511,7 +515,7 @@ namespace RUDP
                 {
                     socket.Send(sendTo, chunk);
                     if (requireAck)
-                        _epsInfo.AddOrUpdate(sendTo, addValue: new(sendTo), updateValueFactory: (endpoint, value) => value.AddUnackPacket(chunk));
+                        _epsInfo.AddOrUpdate(sendTo, addValue: new(sendTo), updateValueFactory: (endpoint, value) => value.AddUnackPacket(pkt.header, chunk));
                 }
                 chunks.Clear();
                 return true;
@@ -611,6 +615,8 @@ namespace RUDP
                 bech32 = _epsInfo[receivedFrom].NPubBech32 ?? "";
             NPub? senderNPub = GetEPNPub(receivedFrom);
 
+            OnPacketReceived?.Invoke(receivedFrom, header, rawBody.ToArray(), timestamp);
+
             switch (header.Type)
             {
                 case PacketType.CHUNKS_PRESENTATION:
@@ -694,7 +700,7 @@ namespace RUDP
                         break;
                     }
 
-                    _epsInfo[receivedFrom]._unack.TryRemove(new UnackData(packet).UID, out UnackData? data);
+                    bool removed = _epsInfo[receivedFrom]._unack.TryRemove(new UnackData(header, packet).UID, out UnackData? data);
                     if (data is not null)
                     {
                         if (data.Timestamp.HasValue)
@@ -805,7 +811,7 @@ namespace RUDP
                     if (packet.Length < Header._minSize)
                         break;
 
-                    if (SigServer || _epsInfo.ContainsKey(receivedFrom))
+                    if (SigServer)
                         break;
 
                     if (!Body.CONNECTION_POSSIBLE(rawBody, out NPub? npubCNPO) || npubCNPO is null)
@@ -842,6 +848,9 @@ namespace RUDP
                         _epsInfo[receivedFrom].SetRelativeIndex(relativeIndexMTU == 0 ? (byte)1 : relativeIndexMTU);
 
                     SendMTUFound(receivedFrom, Convert.ToUInt16(packet.Length));
+
+                    if (_connectingToNPubs.ContainsKey(npubMTUD.Bech32))
+                        _connectingToNPubs.TryRemove(npubMTUD.Bech32, out _);
                     break;
                 case PacketType.MTU_FOUND:
                     SendAcknowledge(receivedFrom, packet);
@@ -1098,6 +1107,13 @@ namespace RUDP
                 addValue: new(ep),
                 updateValueFactory: (endpoint, value) => value.ReduceMTUSize(dataSize)
             );
+
+            foreach (KeyValuePair<string, UnackData> packet in _epsInfo[ep]._unack.Where(x => x.Value.PacketType.HasValue && x.Value.PacketType.Value == PacketType.MTU_DISCOVERY))
+            {
+                bool removed = _epsInfo[ep]._unack.TryRemove(packet.Value.UID, out UnackData? data);
+                data.Dispose();
+            }
+
             if (dataSize < Header._minSize)
                 throw new ApplicationException("MTU size is not large enough to contain minimum packet size");
             SendMTUDiscovery(ep, Convert.ToInt32(_epsInfo[ep].MTUSize));
@@ -1145,15 +1161,8 @@ namespace RUDP
 
             Task.Factory.StartNew(() =>
             {
-                Stopwatch limit = Stopwatch.StartNew();
-                while (limit.Elapsed.TotalSeconds < 15 && !_epsInfo.ContainsKey(remoteEP))
-                {
-                    // Send multiple packet in case they get dropped
-                    SendConnectionPossible(remoteEP);
-                    ThreadUtilities.PauseThread(50);
-                }
                 SendConnectionPossible(remoteEP);
-                limit.Stop();
+                ThreadUtilities.PauseThread(15000);
 
                 if (!_epsInfo.ContainsKey(remoteEP) && !TryPunchSymmetricNAT(remoteEP, skipRandomMaxInterval))
                     OnConnectionFailed?.Invoke(remoteEP);
@@ -1187,9 +1196,7 @@ namespace RUDP
                     continue;
                 eps.Add(ep);
 
-                // Send multiple packet in case they get dropped
-                for (int i = 0; i < 10; i++)
-                    SendConnectionPossible(ep);
+                SendConnectionPossible(ep);
             }
 
             bool succeded = false;
@@ -1237,7 +1244,6 @@ namespace RUDP
                         foreach (KeyValuePair<EndPoint, long> ep in _recentlyDisconnectedEndpoints)
                             if (now - ep.Value >= 50000)
                                 _recentlyDisconnectedEndpoints.TryRemove(ep);
-
 
                         while (_backgroundTaskTimer.Elapsed.TotalMilliseconds < 1000 && socket is not null && socket.Status == SocketStatus.Running)
                             ThreadUtilities.PauseThread(100);

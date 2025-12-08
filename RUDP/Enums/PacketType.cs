@@ -1,6 +1,6 @@
 ﻿namespace RUDP.Enums
 {
-    internal enum PacketType : byte
+    public enum PacketType : byte
     {
         RTTA = 0, // Roung Trip Time A
         RTTB = 1, // Round Trip Time B

@@ -13,9 +13,8 @@ namespace RUDP.Models
         internal long? Timestamp { get; private set; } = null;
 
 
-        internal UnackData(byte[] packet)
+        internal UnackData(Header header, byte[] packet)
         {
-            Header header = Header.Deserialize(packet);
             if (!header.PacketIdentifier.HasValue)
                 return;
             PacketType = header.Type;

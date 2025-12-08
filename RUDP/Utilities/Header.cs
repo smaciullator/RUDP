@@ -4,24 +4,24 @@ using System.Text;
 
 namespace RUDP.Utilities
 {
-    internal class Header
+    public class Header
     {
-        internal const int _sigSize = 128;
-        internal static int _minSize => 1/*Type*/ + _sigSize;
-        internal static int _minFileContentSize => _minSize + 4/*PacketIdentifier size*/ + 4/*ChunkNumber size*/;
+        public const int _sigSize = 128;
+        public static int _minSize => 1/*Type*/ + _sigSize;
+        public static int _minFileContentSize => _minSize + 4/*PacketIdentifier size*/ + 4/*ChunkNumber size*/;
 
 
-        internal PacketType? Type { get; set; } = null;
-        internal string? Signature { get; set; } = null;
-        internal uint? PacketIdentifier { get; set; } = null;
-        internal uint? ChunkNumber { get; set; } = null;
-        internal int Length => (Type.HasValue ? 1 : 0)
+        public PacketType? Type { get; set; } = null;
+        public string? Signature { get; set; } = null;
+        public uint? PacketIdentifier { get; set; } = null;
+        public uint? ChunkNumber { get; set; } = null;
+        public int Length => (Type.HasValue ? 1 : 0)
             + _sigSize
             + (PacketIdentifier.HasValue ? 4 : 0)
             + (ChunkNumber.HasValue ? 4 : 0);
 
 
-        internal static Header RTTA(string? sig, uint uniqueIdentifier)
+        public static Header RTTA(string? sig, uint uniqueIdentifier)
         {
             return new()
             {
@@ -30,7 +30,7 @@ namespace RUDP.Utilities
                 PacketIdentifier = uniqueIdentifier
             };
         }
-        internal static Header RTTB(string? sig, uint uniqueIdentifier)
+        public static Header RTTB(string? sig, uint uniqueIdentifier)
         {
             return new()
             {
@@ -39,7 +39,7 @@ namespace RUDP.Utilities
                 PacketIdentifier = uniqueIdentifier
             };
         }
-        internal static Header ACKNOWLEDGEMENT(string? sig, uint uniqueIdentifier, uint? chunkNumber)
+        public static Header ACKNOWLEDGEMENT(string? sig, uint uniqueIdentifier, uint? chunkNumber)
         {
             return new()
             {
@@ -51,7 +51,7 @@ namespace RUDP.Utilities
         }
 
 
-        internal static Header MTU_DISCOVERY(string? sig, uint uniqueIdentifier)
+        public static Header MTU_DISCOVERY(string? sig, uint uniqueIdentifier)
         {
             return new()
             {
@@ -60,7 +60,7 @@ namespace RUDP.Utilities
                 PacketIdentifier = uniqueIdentifier
             };
         }
-        internal static Header MTU_FOUND(string? sig, uint uniqueIdentifier)
+        public static Header MTU_FOUND(string? sig, uint uniqueIdentifier)
         {
             return new()
             {
@@ -69,7 +69,7 @@ namespace RUDP.Utilities
                 PacketIdentifier = uniqueIdentifier
             };
         }
-        internal static Header DISCONNECTION(string? sig, uint uniqueIdentifier)
+        public static Header DISCONNECTION(string? sig, uint uniqueIdentifier)
         {
             return new()
             {
@@ -80,7 +80,7 @@ namespace RUDP.Utilities
         }
 
 
-        internal static Header P2P_COORDINATION_REQUEST(string? sig, uint uniqueIdentifier)
+        public static Header P2P_COORDINATION_REQUEST(string? sig, uint uniqueIdentifier)
         {
             return new()
             {
@@ -89,7 +89,7 @@ namespace RUDP.Utilities
                 PacketIdentifier = uniqueIdentifier
             };
         }
-        internal static Header UNKNOWN_IDENTITY(string? sig, uint uniqueIdentifier)
+        public static Header UNKNOWN_IDENTITY(string? sig, uint uniqueIdentifier)
         {
             return new()
             {
@@ -98,7 +98,7 @@ namespace RUDP.Utilities
                 PacketIdentifier = uniqueIdentifier
             };
         }
-        internal static Header P2P_CONNECTION_COORDINATION(string? sig, uint uniqueIdentifier)
+        public static Header P2P_CONNECTION_COORDINATION(string? sig, uint uniqueIdentifier)
         {
             return new()
             {
@@ -107,7 +107,7 @@ namespace RUDP.Utilities
                 PacketIdentifier = uniqueIdentifier
             };
         }
-        internal static Header CONNECTION_POSSIBLE(string? sig)
+        public static Header CONNECTION_POSSIBLE(string? sig)
         {
             return new()
             {
@@ -117,7 +117,7 @@ namespace RUDP.Utilities
         }
 
 
-        internal static Header SIGNALING_PROPAGATION(string? sig, uint uniqueIdentifier)
+        public static Header SIGNALING_PROPAGATION(string? sig, uint uniqueIdentifier)
         {
             return new()
             {
@@ -128,7 +128,7 @@ namespace RUDP.Utilities
         }
 
 
-        internal static Header CHUNKS_PRESENTATION(string? sig, uint uniqueIdentifier, uint chunkNumber)
+        public static Header CHUNKS_PRESENTATION(string? sig, uint uniqueIdentifier, uint chunkNumber)
         {
             return new()
             {
@@ -138,7 +138,7 @@ namespace RUDP.Utilities
                 ChunkNumber = chunkNumber
             };
         }
-        internal static Header DATA(string? sig, uint uniqueIdentifier, uint chunkNumber)
+        public static Header DATA(string? sig, uint uniqueIdentifier, uint chunkNumber)
         {
             return new()
             {
@@ -148,7 +148,7 @@ namespace RUDP.Utilities
                 ChunkNumber = chunkNumber
             };
         }
-        internal static Header STREAM(string? sig)
+        public static Header STREAM(string? sig)
         {
             return new()
             {
@@ -156,7 +156,7 @@ namespace RUDP.Utilities
                 Signature = sig
             };
         }
-        internal static Header FILE_PRESENTATION(string? sig, uint uniqueIdentifier, uint chunkNumber)
+        public static Header FILE_PRESENTATION(string? sig, uint uniqueIdentifier, uint chunkNumber)
         {
             return new()
             {
@@ -166,7 +166,7 @@ namespace RUDP.Utilities
                 ChunkNumber = chunkNumber
             };
         }
-        internal static Header FILE_CONTENT(string? sig, uint uniqueIdentifier, uint chunkNumber)
+        public static Header FILE_CONTENT(string? sig, uint uniqueIdentifier, uint chunkNumber)
         {
             return new()
             {
@@ -178,7 +178,7 @@ namespace RUDP.Utilities
         }
 
 
-        internal byte[] Serialize()
+        public byte[] Serialize()
         {
             if (Type is null)
                 throw new ApplicationException("Type missing from header");
@@ -204,7 +204,7 @@ namespace RUDP.Utilities
         /// </summary>
         /// <param name="packet"></param>
         /// <returns></returns>
-        internal static Header Deserialize(byte[] packet)
+        public static Header Deserialize(byte[] packet)
         {
             Span<byte> span = new Span<byte>(packet);
 

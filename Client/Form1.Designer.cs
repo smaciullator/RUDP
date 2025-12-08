@@ -34,6 +34,15 @@
             splitContainer2 = new SplitContainer();
             tabs = new TabControl();
             tbGenerals = new TabPage();
+            lbLastPktSent = new Label();
+            lbLastPktReceived = new Label();
+            label9 = new Label();
+            label7 = new Label();
+            tbDataSize = new TextBox();
+            btnSendFile = new Button();
+            btnSendStream = new Button();
+            btnSendDataContinuosly = new Button();
+            btnSendDataOnce = new Button();
             lbSendBuffersStatus = new Label();
             lbPacketsDownload = new Label();
             lbPacketsUpload = new Label();
@@ -141,6 +150,15 @@
             // 
             // tbGenerals
             // 
+            tbGenerals.Controls.Add(lbLastPktSent);
+            tbGenerals.Controls.Add(lbLastPktReceived);
+            tbGenerals.Controls.Add(label9);
+            tbGenerals.Controls.Add(label7);
+            tbGenerals.Controls.Add(tbDataSize);
+            tbGenerals.Controls.Add(btnSendFile);
+            tbGenerals.Controls.Add(btnSendStream);
+            tbGenerals.Controls.Add(btnSendDataContinuosly);
+            tbGenerals.Controls.Add(btnSendDataOnce);
             tbGenerals.Controls.Add(lbSendBuffersStatus);
             tbGenerals.Controls.Add(lbPacketsDownload);
             tbGenerals.Controls.Add(lbPacketsUpload);
@@ -166,10 +184,95 @@
             tbGenerals.Text = "Generals";
             tbGenerals.UseVisualStyleBackColor = true;
             // 
+            // lbLastPktSent
+            // 
+            lbLastPktSent.AutoSize = true;
+            lbLastPktSent.Location = new Point(123, 331);
+            lbLastPktSent.Name = "lbLastPktSent";
+            lbLastPktSent.Size = new Size(0, 15);
+            lbLastPktSent.TabIndex = 42;
+            // 
+            // lbLastPktReceived
+            // 
+            lbLastPktReceived.AutoSize = true;
+            lbLastPktReceived.Location = new Point(123, 305);
+            lbLastPktReceived.Name = "lbLastPktReceived";
+            lbLastPktReceived.Size = new Size(0, 15);
+            lbLastPktReceived.TabIndex = 41;
+            // 
+            // label9
+            // 
+            label9.AutoSize = true;
+            label9.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
+            label9.Location = new Point(8, 331);
+            label9.Name = "label9";
+            label9.Size = new Size(81, 15);
+            label9.TabIndex = 40;
+            label9.Text = "Last pkt sent:";
+            // 
+            // label7
+            // 
+            label7.AutoSize = true;
+            label7.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
+            label7.Location = new Point(8, 305);
+            label7.Name = "label7";
+            label7.Size = new Size(106, 15);
+            label7.TabIndex = 39;
+            label7.Text = "Last pkt received:";
+            // 
+            // tbDataSize
+            // 
+            tbDataSize.Location = new Point(8, 385);
+            tbDataSize.Name = "tbDataSize";
+            tbDataSize.PlaceholderText = "Data size...";
+            tbDataSize.Size = new Size(104, 23);
+            tbDataSize.TabIndex = 38;
+            tbDataSize.Text = "500";
+            // 
+            // btnSendFile
+            // 
+            btnSendFile.Location = new Point(118, 455);
+            btnSendFile.Name = "btnSendFile";
+            btnSendFile.Size = new Size(104, 23);
+            btnSendFile.TabIndex = 37;
+            btnSendFile.Text = "Send File";
+            btnSendFile.UseVisualStyleBackColor = true;
+            btnSendFile.Click += btnSendFile_Click;
+            // 
+            // btnSendStream
+            // 
+            btnSendStream.Location = new Point(8, 455);
+            btnSendStream.Name = "btnSendStream";
+            btnSendStream.Size = new Size(104, 23);
+            btnSendStream.TabIndex = 36;
+            btnSendStream.Text = "Send Stream";
+            btnSendStream.UseVisualStyleBackColor = true;
+            btnSendStream.Click += btnSendStream_Click;
+            // 
+            // btnSendDataContinuosly
+            // 
+            btnSendDataContinuosly.Location = new Point(118, 414);
+            btnSendDataContinuosly.Name = "btnSendDataContinuosly";
+            btnSendDataContinuosly.Size = new Size(152, 23);
+            btnSendDataContinuosly.TabIndex = 35;
+            btnSendDataContinuosly.Text = "Send Data Continuosly";
+            btnSendDataContinuosly.UseVisualStyleBackColor = true;
+            btnSendDataContinuosly.Click += btnSendDataContinuosly_Click;
+            // 
+            // btnSendDataOnce
+            // 
+            btnSendDataOnce.Location = new Point(8, 414);
+            btnSendDataOnce.Name = "btnSendDataOnce";
+            btnSendDataOnce.Size = new Size(104, 23);
+            btnSendDataOnce.TabIndex = 34;
+            btnSendDataOnce.Text = "Send Data Once";
+            btnSendDataOnce.UseVisualStyleBackColor = true;
+            btnSendDataOnce.Click += btnSendDataOnce_Click;
+            // 
             // lbSendBuffersStatus
             // 
             lbSendBuffersStatus.AutoSize = true;
-            lbSendBuffersStatus.Location = new Point(63, 241);
+            lbSendBuffersStatus.Location = new Point(63, 216);
             lbSendBuffersStatus.Name = "lbSendBuffersStatus";
             lbSendBuffersStatus.Size = new Size(99, 15);
             lbSendBuffersStatus.TabIndex = 33;
@@ -178,7 +281,7 @@
             // lbPacketsDownload
             // 
             lbPacketsDownload.AutoSize = true;
-            lbPacketsDownload.Location = new Point(80, 283);
+            lbPacketsDownload.Location = new Point(80, 258);
             lbPacketsDownload.Name = "lbPacketsDownload";
             lbPacketsDownload.Size = new Size(13, 15);
             lbPacketsDownload.TabIndex = 32;
@@ -187,7 +290,7 @@
             // lbPacketsUpload
             // 
             lbPacketsUpload.AutoSize = true;
-            lbPacketsUpload.Location = new Point(63, 226);
+            lbPacketsUpload.Location = new Point(63, 201);
             lbPacketsUpload.Name = "lbPacketsUpload";
             lbPacketsUpload.Size = new Size(13, 15);
             lbPacketsUpload.TabIndex = 31;
@@ -196,7 +299,7 @@
             // lbBytesDownload
             // 
             lbBytesDownload.AutoSize = true;
-            lbBytesDownload.Location = new Point(80, 268);
+            lbBytesDownload.Location = new Point(80, 243);
             lbBytesDownload.Name = "lbBytesDownload";
             lbBytesDownload.Size = new Size(13, 15);
             lbBytesDownload.TabIndex = 30;
@@ -206,7 +309,7 @@
             // 
             label8.AutoSize = true;
             label8.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
-            label8.Location = new Point(8, 268);
+            label8.Location = new Point(8, 243);
             label8.Name = "label8";
             label8.Size = new Size(66, 15);
             label8.TabIndex = 29;
@@ -215,7 +318,7 @@
             // lbBytesUpload
             // 
             lbBytesUpload.AutoSize = true;
-            lbBytesUpload.Location = new Point(63, 211);
+            lbBytesUpload.Location = new Point(63, 186);
             lbBytesUpload.Name = "lbBytesUpload";
             lbBytesUpload.Size = new Size(13, 15);
             lbBytesUpload.TabIndex = 28;
@@ -225,7 +328,7 @@
             // 
             label6.AutoSize = true;
             label6.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
-            label6.Location = new Point(8, 211);
+            label6.Location = new Point(8, 186);
             label6.Name = "label6";
             label6.Size = new Size(49, 15);
             label6.TabIndex = 27;
@@ -329,7 +432,7 @@
             tbPeers.Location = new Point(4, 24);
             tbPeers.Name = "tbPeers";
             tbPeers.Padding = new Padding(3);
-            tbPeers.Size = new Size(1115, 486);
+            tbPeers.Size = new Size(304, 486);
             tbPeers.TabIndex = 1;
             tbPeers.Text = "Peers Network";
             tbPeers.UseVisualStyleBackColor = true;
@@ -348,7 +451,7 @@
             dgvPeers.Name = "dgvPeers";
             dgvPeers.RowHeadersVisible = false;
             dgvPeers.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-            dgvPeers.Size = new Size(1109, 480);
+            dgvPeers.Size = new Size(298, 480);
             dgvPeers.TabIndex = 2;
             dgvPeers.CellContentClick += dgvPeers_CellContentClick;
             // 
@@ -396,7 +499,7 @@
             tbSignalingServers.Controls.Add(dgvSignalingServers);
             tbSignalingServers.Location = new Point(4, 24);
             tbSignalingServers.Name = "tbSignalingServers";
-            tbSignalingServers.Size = new Size(1115, 486);
+            tbSignalingServers.Size = new Size(304, 486);
             tbSignalingServers.TabIndex = 2;
             tbSignalingServers.Text = "Signaling Servers";
             tbSignalingServers.UseVisualStyleBackColor = true;
@@ -415,7 +518,7 @@
             dgvSignalingServers.Name = "dgvSignalingServers";
             dgvSignalingServers.RowHeadersVisible = false;
             dgvSignalingServers.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-            dgvSignalingServers.Size = new Size(1115, 486);
+            dgvSignalingServers.Size = new Size(304, 486);
             dgvSignalingServers.TabIndex = 0;
             // 
             // CurrentUploadSpeed
@@ -592,5 +695,14 @@
         private DataGridViewTextBoxColumn dataGridViewTextBoxColumn9;
         private DataGridViewButtonColumn Disconnect;
         private ToolStripMenuItem nostrContactsToolStripMenuItem;
+        private Button btnSendFile;
+        private Button btnSendStream;
+        private Button btnSendDataContinuosly;
+        private Button btnSendDataOnce;
+        private TextBox tbDataSize;
+        private Label lbLastPktSent;
+        private Label lbLastPktReceived;
+        private Label label9;
+        private Label label7;
     }
 }

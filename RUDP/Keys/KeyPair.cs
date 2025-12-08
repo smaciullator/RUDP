@@ -1,17 +1,17 @@
 ﻿namespace RUDP.Keys
 {
-    internal class KeyPair : IEquatable<KeyPair>
+    public class KeyPair : IEquatable<KeyPair>
     {
-        internal NSec NSec { get; }
-        internal NPub NPub { get; }
+        public NSec NSec { get; }
+        public NPub NPub { get; }
 
 
-        internal KeyPair(NSec privateKey, NPub publicKey)
+        public KeyPair(NSec privateKey, NPub publicKey)
         {
             NSec = privateKey;
             NPub = publicKey;
         }
-        internal KeyPair(NSec privateKey)
+        public KeyPair(NSec privateKey)
         {
             NSec = privateKey;
             NPub = NPub.FromPrivateEc(NSec.Ec);
@@ -22,7 +22,7 @@
         /// Generate a new random key pair
         /// </summary>
         /// <returns></returns>
-        internal static KeyPair GenerateNew()
+        public static KeyPair GenerateNew()
         {
             NSec privateKey = NSec.New();
             return new KeyPair(privateKey);
@@ -32,17 +32,17 @@
         /// </summary>
         /// <param name="privateKey"></param>
         /// <returns></returns>
-        internal static KeyPair From(NSec privateKey)
+        public static KeyPair From(NSec privateKey)
         {
             return new KeyPair(privateKey);
         }
 
 
-        internal byte[] Encrypt(byte[] data, NPub recipientPubKey, out byte[] ivBytes)
+        public byte[] Encrypt(byte[] data, NPub recipientPubKey, out byte[] ivBytes)
         {
             return NSec.Encrypt(data, recipientPubKey, out ivBytes);
         }
-        internal byte[] Decrypt(byte[] encryptedData, byte[] ivBytes, NPub senderPubKey)
+        public byte[] Decrypt(byte[] encryptedData, byte[] ivBytes, NPub senderPubKey)
         {
             return NSec.Decrypt(encryptedData, ivBytes, senderPubKey);
         }

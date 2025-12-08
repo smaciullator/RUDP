@@ -7,7 +7,7 @@
         "Action": "Start"
       },
       {
-        "Path": "SignalingServer\\SignalingServer.csproj",
+        "Path": "SignalingService\\SignalingService.csproj",
         "Action": "Start"
       }
     ]

@@ -5,11 +5,11 @@ using System.Security.Cryptography;
 
 namespace RUDP.Keys
 {
-    internal class NSec : IEquatable<NSec>
+    public class NSec : IEquatable<NSec>
     {
-        internal string Hex { get; }
-        internal string Bech32 { get; }
-        internal ECPrivKey Ec { get; }
+        public string Hex { get; }
+        public string Bech32 { get; }
+        public ECPrivKey Ec { get; }
 
 
         private NSec(string hex, string bech32, ECPrivKey ec)
@@ -24,7 +24,7 @@ namespace RUDP.Keys
         /// Generate a new private key Hex and return a valid NSec instance
         /// </summary>
         /// <returns></returns>
-        internal static NSec New()
+        public static NSec New()
         {
             using RandomNumberGenerator randomGen = RandomNumberGenerator.Create();
             byte[] randomBytes = new byte[32];
@@ -38,7 +38,7 @@ namespace RUDP.Keys
         /// Derive an NPub instance from this NSec
         /// </summary>
         /// <returns></returns>
-        internal NPub DerivePublicKey()
+        public NPub DerivePublicKey()
         {
             return NPub.FromPrivateEc(Ec);
         }
@@ -48,7 +48,7 @@ namespace RUDP.Keys
         /// <param name="publicKey"></param>
         /// <returns>Return the resulting shared key as an NPub instance</returns>
         /// <exception cref="InvalidOperationException"></exception>
-        internal NPub DeriveSharedKey(NPub publicKey)
+        public NPub DeriveSharedKey(NPub publicKey)
         {
             Span<byte> input = stackalloc byte[33];
             input[0] = 0x02;
@@ -71,7 +71,7 @@ namespace RUDP.Keys
         /// </summary>
         /// <param name="data"></param>
         /// <returns>Return a valid signature if success, or null in case of error</returns>
-        internal string? SignHex(byte[] data)
+        public string? SignHex(byte[] data)
         {
             if (data is null || data.Length == 0)
                 return null;
@@ -79,20 +79,20 @@ namespace RUDP.Keys
         }
 
 
-        internal static NSec FromHex(string hex)
+        public static NSec FromHex(string hex)
         {
             ECPrivKey ec = ECPrivKey.Create(hex.HexToByteArray());
             string bech32 = hex.HexToNsecBech32() ?? string.Empty;
             return new NSec(hex, bech32, ec);
         }
-        internal static NSec FromBech32(string bech32)
+        public static NSec FromBech32(string bech32)
         {
             string? hex = bech32.Bech32ToHexKey(out string? hrp);
             if (!Bech32Identifiers.NSec.Equals(hrp, StringComparison.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(hex))
                 throw new ArgumentException("Provided bech32 key is not 'nsec'", nameof(bech32));
             return FromHex(hex);
         }
-        internal static NSec FromEc(ECPrivKey ec)
+        public static NSec FromEc(ECPrivKey ec)
         {
             string hex = ToHex(ec);
             if (string.IsNullOrWhiteSpace(hex))
@@ -101,7 +101,7 @@ namespace RUDP.Keys
         }
 
 
-        internal static string ToHex(ECPrivKey key)
+        public static string ToHex(ECPrivKey key)
         {
             Span<byte> keySpan = stackalloc byte[65];
             key.WriteToSpan(keySpan);
@@ -110,14 +110,14 @@ namespace RUDP.Keys
         }
 
 
-        internal byte[] Encrypt(byte[] data, NPub recipientPubKey, out byte[] ivBytes)
+        public byte[] Encrypt(byte[] data, NPub recipientPubKey, out byte[] ivBytes)
         {
             using Aes aes = Aes.Create();
             aes.Key = DeriveSharedKey(recipientPubKey).Ec.ToBytes();
             ivBytes = aes.IV;
             return aes.EncryptCbc(data, aes.IV);
         }
-        internal byte[] Decrypt(byte[] encryptedData, byte[] ivBytes, NPub senderPubKey)
+        public byte[] Decrypt(byte[] encryptedData, byte[] ivBytes, NPub senderPubKey)
         {
             using Aes aes = Aes.Create();
             aes.Key = DeriveSharedKey(senderPubKey).Ec.ToBytes();

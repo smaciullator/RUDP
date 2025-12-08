@@ -1,8 +1,8 @@
 ﻿using RUDP.Extensions;
 using RUDP.Keys;
+using RUDP.Utilities;
 using System.Collections.Concurrent;
 using System.Net;
-using System.Security.Cryptography;
 
 namespace RUDP.Models
 {
@@ -222,9 +222,9 @@ namespace RUDP.Models
         }
 
 
-        internal EPInfo AddUnackPacket(byte[] packet)
+        internal EPInfo AddUnackPacket(Header header, byte[] packet)
         {
-            UnackData unack = new(packet);
+            UnackData unack = new(header, packet);
             if (unack.Timestamp.HasValue)
                 _unack.TryAdd(unack.UID, unack);
             return this;

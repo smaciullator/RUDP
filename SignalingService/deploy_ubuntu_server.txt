@@ -1,0 +1,9 @@
+﻿ON WINDOWS
+1- Pubblica
+2- ELIMINA APPSETTINGS.JSON
+
+
+scp -r "D:\Emanuele\Progetti\RUDP\SignalingService\bin\Release\net8.0\publish\win-x64\*" smaciullator@192.168.1.184:~/RUDP/SignalingServer/app/
+
+ON UBUNTU
+sudo docker compose stop rudp_signaling_server && sudo docker compose build rudp_signaling_server && sudo docker compose up -d rudp_signaling_server
