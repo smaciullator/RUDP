@@ -645,7 +645,7 @@ namespace RUDP
                         break;
                     }
 
-                    if (!ManageDataChunks(receivedFrom, header, packet, out byte[] fullData))
+                    if (!ManageDataChunks(receivedFrom, header, Body.ExtractFromPacket(packet), out byte[] fullData))
                         break;
 
                     OnData?.Invoke(receivedFrom, bech32, PacketUtilities.DecryptMessage(fullData, Identity.NSec, senderNPub), timestamp);
@@ -922,7 +922,7 @@ namespace RUDP
         {
             fullData = new byte[0];
 
-            if (header.ChunkNumber.HasValue)
+            if (header.ChunkNumber.HasValue && _receivingChunks.ContainsKey(header.PacketIdentifier.Value))
             {
                 _epsInfo[ep]._chunks.AddOrUpdate(
                     header.PacketIdentifier.Value,

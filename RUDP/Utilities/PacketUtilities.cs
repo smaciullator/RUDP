@@ -1,9 +1,7 @@
 ﻿using RUDP.Extensions;
 using RUDP.Keys;
 using System.Net;
-using System.Reflection.PortableExecutable;
 using System.Security.Cryptography;
-using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace RUDP.Utilities
 {

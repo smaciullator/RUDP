@@ -54,7 +54,7 @@ namespace RUDP.Models
         public PeerEPs SetEndPoint(EndPoint? ep, byte targetRelativeIndex, bool connected)
         {
             Connected = connected;
-            if (targetRelativeIndex == 1)
+            if (targetRelativeIndex == 0 || targetRelativeIndex == 1)
                 EP1 = ep;
             else if (targetRelativeIndex == 2)
                 EP2 = ep;
