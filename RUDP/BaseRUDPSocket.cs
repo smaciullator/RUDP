@@ -7,10 +7,7 @@ using System.Collections.Concurrent;
 using System.Data;
 using System.Diagnostics;
 using System.Net;
-using System.Net.Sockets;
-using System.Reflection.PortableExecutable;
 using System.Text;
-using static RUDP.MultiThreadUDPSocket;
 
 namespace RUDP
 {
@@ -662,7 +659,7 @@ namespace RUDP
                         break;
                     }
 
-                    if (!ManageFilePresentationChunks(receivedFrom, header, packet, out byte[] fullFilePresentation))
+                    if (!ManageFilePresentationChunks(receivedFrom, header, Body.ExtractFromPacket(packet), out byte[] fullFilePresentation))
                         break;
 
                     break;
@@ -916,7 +913,8 @@ namespace RUDP
 
                     OnSignalingPropagation?.Invoke(peerEPSigProp, peerNPubSigProp.Bech32, relativeIndexSigProp);
                     break;
-            };
+            }
+            ;
         }
         private bool ManageDataChunks(EndPoint ep, Header header, byte[] body, out byte[] fullData)
         {
@@ -938,6 +936,8 @@ namespace RUDP
                 // If we received all packets
                 if (_receivingChunks.ContainsKey(header.PacketIdentifier.Value) && _receivingChunks[header.PacketIdentifier.Value] == _epsInfo[ep]._chunks[header.PacketIdentifier.Value].Count)
                 {
+                    int totalSize = _epsInfo[ep]._chunks[header.PacketIdentifier.Value].Sum(c => c.Value.Length);
+                    fullData = new byte[totalSize];
                     int offset = 0;
                     foreach (KeyValuePair<uint, byte[]> chunk in _epsInfo[ep]._chunks[header.PacketIdentifier.Value].OrderBy(x => x.Key))
                     {
@@ -976,10 +976,8 @@ namespace RUDP
 
                 byte[] buffer = new byte[chunkContentSize];
                 while ((readBytes = file.Read(buffer, 0, buffer.Length)) > 0)
-                {
-                    SendFileContent(receivedFrom, _epsInfo[receivedFrom].GetNextSendNumeration(), chunkNumber++, new Span<byte>(buffer).Slice(0, readBytes).ToArray());
-                    file.Position += readBytes;
-                }
+                    //SendFileContent(receivedFrom, _epsInfo[receivedFrom].GetNextSendNumeration(), chunkNumber++, new Span<byte>(buffer).Slice(0, readBytes).ToArray());
+                    SendFileContent(receivedFrom, packetIdentifier, chunkNumber++, new Span<byte>(buffer).Slice(0, readBytes).ToArray());
 
                 file.Dispose();
             });
@@ -988,7 +986,7 @@ namespace RUDP
         {
             decryptedFullData = new byte[0];
 
-            if (header.ChunkNumber.HasValue)
+            if (header.ChunkNumber.HasValue && _receivingChunks.ContainsKey(header.PacketIdentifier.Value))
             {
                 _epsInfo[ep]._chunks.AddOrUpdate(
                     header.PacketIdentifier.Value,
@@ -1000,7 +998,6 @@ namespace RUDP
                     addValue: body,
                     updateValueFactory: (chunkNumber, data) => data
                 );
-
 
                 // If we received all packets
                 if (_receivingChunks.ContainsKey(header.PacketIdentifier.Value) && _receivingChunks[header.PacketIdentifier.Value] == _epsInfo[ep]._chunks[header.PacketIdentifier.Value].Count)
@@ -1094,6 +1091,7 @@ namespace RUDP
 
                 OnFileReceived?.Invoke(receivedFrom, bech32, _receivingFiles[packetIdentifier].FileFullPath);
                 _receivingFiles.TryRemove(packetIdentifier, out FileData? fd);
+
                 if (fd is not null)
                     fd.Dispose();
             }
